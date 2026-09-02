@@ -1,0 +1,21 @@
+{
+  "name": "quirky-pythagoras-mes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Event-driven Manufacturing Execution System (MES) for Process Manufacturing",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:shared": "npm --workspace=@mes/shared run build -- --watch",
+    "dev:api": "npm --workspace=@mes/api run dev",
+    "dev:web": "npm --workspace=@mes/web run dev",
+    "test": "npm test --workspaces --if-present",
+    "seed": "npm --workspace=@mes/api run seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

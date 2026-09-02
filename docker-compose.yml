@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mes_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mes_user
+      POSTGRES_PASSWORD: mes_password
+      POSTGRES_DB: mes_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./apps/api/src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+  adminer:
+    image: adminer:latest
+    container_name: mes_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:
