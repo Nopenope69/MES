@@ -60,6 +60,9 @@ smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
     if (!isMatch) {
       res.status(400).json({
         verified: false,
+        valid: false,
+        decision: 'BLOCKED_MISMATCH',
+        machineAction: 'INTERLOCK_TRIPPED_HALT_FEEDER',
         error: 'MISMATCHED_PART_NUMBER',
         message: `FATAL: Slot ${slotNo} requires part ${expectedPart}, but scanned reel is ${scannedPartNumber}! Halting feeder.`,
         expectedPartNumber: expectedPart,
@@ -71,6 +74,9 @@ smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
     if (isMslExpired) {
       res.status(400).json({
         verified: false,
+        valid: false,
+        decision: 'BLOCKED_MSL_EXPIRED',
+        machineAction: 'INTERLOCK_TRIPPED_HALT_FEEDER',
         error: 'MSL_EXPIRED',
         message: `WARNING: Reel ${scannedReelId} has exceeded its moisture floor life (${mslMinutes} mins left)! Requires baking.`,
         expectedPartNumber: expectedPart,
@@ -102,6 +108,9 @@ smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
 
     res.json({
       verified: true,
+      valid: true,
+      decision: 'APPROVED',
+      machineAction: 'ENGAGE_FEEDER_PICKUP',
       message: `Verified & Spliced: Reel ${scannedReelId} matched slot ${slotNo} (${expectedPart}).`,
       expectedPartNumber: expectedPart,
       scannedPartNumber,

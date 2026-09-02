@@ -24,10 +24,14 @@ export class EventIngestionService {
     const now = new Date().toISOString();
 
     let assetPath = rawEnvelope.assetPath;
-    if (!assetPath && rawEnvelope.workCenterId) {
-      const wc = await db.query('SELECT asset_path FROM work_centers WHERE id = ?', [rawEnvelope.workCenterId]);
-      if (wc.length > 0 && wc[0].asset_path) {
-        assetPath = wc[0].asset_path;
+    let batchId = rawEnvelope.batchId;
+    if (rawEnvelope.workCenterId) {
+      const wc = await db.query('SELECT asset_path, current_batch_id FROM work_centers WHERE id = ?', [rawEnvelope.workCenterId]);
+      if (wc.length > 0) {
+        if (!assetPath && wc[0].asset_path) assetPath = wc[0].asset_path;
+        if (!batchId && rawEnvelope.eventType !== 'BATCH_STARTED' && wc[0].current_batch_id) {
+          batchId = wc[0].current_batch_id;
+        }
       }
     }
 
@@ -42,7 +46,7 @@ export class EventIngestionService {
       workCenterId: rawEnvelope.workCenterId!,
       assetPath,
       ingressEventId: rawEnvelope.ingressEventId,
-      batchId: rawEnvelope.batchId,
+      batchId,
       workOrderId: rawEnvelope.workOrderId,
       operatorId: rawEnvelope.operatorId,
       sequenceId: rawEnvelope.sequenceId,

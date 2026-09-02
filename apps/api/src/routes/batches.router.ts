@@ -65,9 +65,9 @@ batchesRouter.get('/:id', async (req: Request, res: Response) => {
 
     // Actual consumptions logged
     const actualConsumptions = await db.query(`
-      SELECT mc.*, ml.supplier_name, ml.supplier_lot_number, ml.expiry_date
+      SELECT mc.*, r.supplier_name, r.lot_number, r.date_code
       FROM material_consumptions mc
-      LEFT JOIN material_lots ml ON mc.material_lot_number = ml.lot_number
+      LEFT JOIN component_reels r ON (mc.material_lot_number = r.reel_id OR mc.material_lot_number = r.lot_number)
       WHERE mc.batch_id = ? OR mc.batch_id = ?
       ORDER BY mc.consumed_at ASC
     `, [batch.id, batch.batch_number]);

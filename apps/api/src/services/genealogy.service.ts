@@ -117,7 +117,7 @@ export class GenealogyService {
       });
     }
 
-    return { rootId: rootNodeId, nodes, edges };
+    return { rootId: rootNodeId, rootNodeId, nodes, edges };
   }
 
   /**
@@ -195,6 +195,6 @@ export class GenealogyService {
       });
     }
 
-    return { rootId: reelNodeId, nodes, edges };
+    return { rootId: reelNodeId, rootNodeId: reelNodeId, nodes, edges };
   }
 }

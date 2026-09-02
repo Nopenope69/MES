@@ -220,6 +220,7 @@ export interface ShiftSummaryReport {
   goodQuantity: number;
   rejectedQuantity: number;
   qualityPercentage: number;
+  batchesCompleted?: number;
   topDowntimeReasons: Array<{
     reasonCode: string;
     reasonLabel: string;
@@ -245,6 +246,7 @@ export interface GenealogyEdge {
 
 export interface GenealogyTree {
   rootId: string;
+  rootNodeId?: string;
   nodes: GenealogyNode[];
   edges: GenealogyEdge[];
 }

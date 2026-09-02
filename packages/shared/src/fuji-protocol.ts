@@ -43,7 +43,9 @@ export type FujiCommand =
   | 'FEEDERUSAGE'
   | 'STOPEQUIP'
   | 'RESTARTEQUIP'
-  | 'MESSAGETEXT';
+  | 'MESSAGETEXT'
+  | 'PDERROR'
+  | 'NOZZLECOUNT';
 
 /**
  * Mapping Fuji machine status code to our canonical EquipmentState.

@@ -216,6 +216,105 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
     return expectedPart === partNumber;
   }
 
+  public parseCommandTokens(command: FujiCommand, tokens: string[]): Record<string, any> {
+    const data: Record<string, any> = {};
+    if (!tokens || tokens.length < 2) return data;
+
+    switch (command) {
+      case 'MCSTATECHANGE':
+        data.time = tokens[2];
+        data.lineName = tokens[3];
+        data.machineName = tokens[4];
+        data.moduleNo = tokens[5];
+        data.previousStatus = parseInt(tokens[6] || '3', 10);
+        data.currentStatus = parseInt(tokens[7] || '5', 10);
+        break;
+
+      case 'PRODSTARTED':
+        data.time = tokens[2];
+        data.lineName = tokens[3];
+        data.machineName = tokens[4];
+        data.moduleNo = tokens[5];
+        data.laneNo = tokens[6];
+        data.productMode = tokens[7];
+        data.programName = tokens[8];
+        data.panelNo = tokens[9];
+        break;
+
+      case 'PRODCOMPLETED':
+      case 'PRODCOMPLETEII':
+        data.time = tokens[2];
+        data.lineName = tokens[3];
+        data.machineName = tokens[4];
+        data.moduleNo = tokens[5];
+        data.laneNo = tokens[6];
+        data.productMode = tokens[7];
+        data.programName = tokens[8];
+        data.panelNo = tokens[9];
+        data.blockCount = tokens[10];
+        data.blockSkipCount = tokens[11];
+        data.bsInfoBit = tokens[12];
+        data.cycleTime = tokens[13];
+        break;
+
+      case 'LOADCOMP':
+      case 'LOADCOMPIV':
+        data.time = tokens[2];
+        data.lineName = tokens[3];
+        data.machineName = tokens[4];
+        data.moduleNo = tokens[5];
+        data.stageNo = tokens[6];
+        data.slotNo = tokens[7];
+        data.subSlotNo = tokens[8];
+        data.feederId = tokens[9];
+        data.partNo = tokens[10];
+        data.newReelId = tokens[11];
+        data.lotNo = tokens[12];
+        data.quantity = tokens[13];
+        break;
+
+      case 'CHANGECOMP':
+      case 'CHANGECOMPII':
+        data.time = tokens[2];
+        data.lineName = tokens[3];
+        data.machineName = tokens[4];
+        data.moduleNo = tokens[5];
+        if (tokens.length >= 12) {
+          data.slotNo = tokens[7];
+          data.partNo = tokens[8];
+          data.feederId = tokens[9];
+          data.oldReelId = tokens[10];
+          data.newReelId = tokens[11];
+          data.quantity = tokens[12];
+        } else {
+          data.slotNo = tokens[6] || '1';
+          data.partNo = tokens[7] || '';
+          data.feederId = tokens[8] || 'FID-W08F-01';
+          data.oldReelId = tokens[9] || 'REEL-OLD';
+          data.newReelId = tokens[10] || 'REEL-NEW';
+          data.quantity = tokens[11] || '10000';
+        }
+        break;
+
+      case 'PDERROR':
+        data.time = tokens[2];
+        data.lineName = tokens[3];
+        data.machineName = tokens[4];
+        data.moduleNo = tokens[5];
+        data.stageNo = tokens[6];
+        data.slotNo = tokens[7];
+        data.feederId = tokens[8];
+        data.partNo = tokens[9];
+        data.nozzleId = tokens[10];
+        data.headId = tokens[11];
+        data.errorCode = tokens[12];
+        data.subErrorCode = tokens[13];
+        break;
+    }
+
+    return data;
+  }
+
   public startListener(port = 30040, workCenterId = 'wc-nxt-01'): void {
     if (this.isRunning) return;
 
@@ -252,10 +351,12 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
           return;
         }
 
+        const fields = this.parseCommandTokens(parsed.command, parsed.tokens);
+
         // Splicing & Part Load Interlock
-        if (parsed.command === 'LOADCOMP' || parsed.command === 'LOADCOMPIV' || parsed.command === 'CHANGECOMP') {
-          const slotNo = parseInt(parsed.tokens[3] || '1', 10);
-          const partNo = parsed.tokens[4] || '';
+        if (parsed.command === 'LOADCOMP' || parsed.command === 'LOADCOMPIV' || parsed.command === 'CHANGECOMP' || parsed.command === 'CHANGECOMPII') {
+          const slotNo = parseInt(fields.slotNo || parsed.tokens[3] || '1', 10);
+          const partNo = fields.partNo || parsed.tokens[4] || '';
 
           const isAllowed = await this.verifySplicingInterlock(slotNo, partNo, workCenterId);
           if (!isAllowed) {
@@ -266,7 +367,7 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
         }
 
         // Project Canonical Event
-        const canonical = this.toCanonicalEvent(parsed.command, parsed.seqId, { raw: parsed.payloadRaw }, workCenterId);
+        const canonical = this.toCanonicalEvent(parsed.command, parsed.seqId, fields, workCenterId);
         if (canonical) {
           canonical.ingressEventId = ingressId;
           await EventIngestionService.ingest(canonical);
