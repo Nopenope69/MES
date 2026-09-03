@@ -13,7 +13,8 @@
     "dev:api": "npm --workspace=@mes/api run dev",
     "dev:web": "npm --workspace=@mes/web run dev",
     "test": "npm test --workspaces --if-present",
-    "seed": "npm --workspace=@mes/api run seed"
+    "seed": "npm --workspace=@mes/api run seed",
+    "simulate:fuji": "tsx apps/api/src/adapters/fuji-simulator.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

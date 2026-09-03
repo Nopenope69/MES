@@ -53,7 +53,6 @@ export class FujiSmtSimulator {
       });
 
       this.client.on('data', (data) => {
-        // Log received ACKs
         const str = data.toString('utf-8');
         if (str.includes('KEEPALIVE')) {
           this.sendFrame('KEEPALIVE_ACK');
@@ -118,7 +117,41 @@ export class FujiSmtSimulator {
       'NXT01',
       '1', // Module 1
       '1', // NumList = 1
-      `1\t${slotNo}\t${partNo}\tFID-W08F-01\tREEL-OLD\t${newReelId}\t10000`
+      '1', // SeqNo = 1
+      slotNo.toString(),
+      partNo,
+      'FID-W08F-01',
+      'REEL-OLD',
+      newReelId,
+      '10000'
+    );
+  }
+
+  /**
+   * Simulates a parts drop error (PDERROR) on a feeder slot.
+   */
+  public async simulatePickError(
+    slotNo: number, 
+    feederId: string, 
+    partNo: string, 
+    nozzleId = 'NOZZLE-01', 
+    errorCode = 'VISION_ERROR'
+  ): Promise<void> {
+    const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    await this.sendFrame(
+      'PDERROR',
+      timestamp,
+      'LINE01',
+      'NXT01',
+      '1', // Module
+      '1', // Stage
+      slotNo.toString(),
+      feederId,
+      partNo,
+      nozzleId,
+      'HEAD-01',
+      errorCode,
+      'SUB-01'
     );
   }
 
@@ -144,4 +177,42 @@ export class FujiSmtSimulator {
       this.isConnected = false;
     }
   }
+}
+
+if (require.main === module) {
+  const sim = new FujiSmtSimulator();
+  console.log('[Fuji Simulator] Connecting to MES Fuji Gateway on port 30040...');
+  sim.connect().then(async () => {
+    console.log('[Fuji Simulator] Connected! Simulating live factory floor events:');
+    
+    // 1. Machine transition: IDLE (3) -> RUNNING (5)
+    console.log('[1/4] Sending MCSTATECHANGE: Fuji NXT III transitioned to RUNNING');
+    await sim.simulateStateChange(3, 5);
+
+    // 2. Stream board placement completions
+    for (let i = 1; i <= 3; i++) {
+      await new Promise(r => setTimeout(r, 600));
+      const panelNo = 142 + i;
+      console.log(`[2/4] Sending PRODCOMPLETEII: Board #${panelNo} placement completed (Cycle: 18.24s, 4 blocks)`);
+      await sim.simulatePanelCycle(panelNo, 18.24);
+    }
+
+    // 3. Simulate optical pick error on Slot 3
+    await new Promise(r => setTimeout(r, 600));
+    console.log('[3/4] Sending PDERROR: Feeder Slot 3 Nozzle misfire recorded in error pareto');
+    await sim.simulatePickError(3, 'FID-W08F-03', 'STM32F401RET6', 'NZ-0402-01', 'VISION_FIDUCIAL_FAIL');
+
+    // 4. Simulate component reel splice on Slot 1
+    await new Promise(r => setTimeout(r, 600));
+    console.log('[4/4] Sending CHANGECOMPII: Feeder Slot 1 spliced with new reel REEL-MUR-SPLICE-99');
+    await sim.simulateReelSplice(1, 'C0402-100NF-16V', 'REEL-MUR-SPLICE-99');
+
+    await new Promise(r => setTimeout(r, 500));
+    console.log('[Fuji Simulator] Sequence complete. All frames ingested and projected into MES.');
+    sim.disconnect();
+    process.exit(0);
+  }).catch((err) => {
+    console.error('[Fuji Simulator] Error:', err);
+    process.exit(1);
+  });
 }

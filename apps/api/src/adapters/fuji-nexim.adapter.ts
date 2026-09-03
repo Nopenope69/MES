@@ -278,14 +278,14 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
         data.time = tokens[2];
         data.lineName = tokens[3];
         data.machineName = tokens[4];
-        data.moduleNo = tokens[5];
-        if (tokens.length >= 12) {
-          data.slotNo = tokens[7];
-          data.partNo = tokens[8];
-          data.feederId = tokens[9];
-          data.oldReelId = tokens[10];
-          data.newReelId = tokens[11];
-          data.quantity = tokens[12];
+        if (tokens.length >= 13) {
+          // tokens[6]=numList, tokens[7]=subSeq, tokens[8]=slotNo, tokens[9]=partNo, tokens[10]=feederId
+          data.slotNo = tokens[8];
+          data.partNo = tokens[9];
+          data.feederId = tokens[10];
+          data.oldReelId = tokens[11];
+          data.newReelId = tokens[12];
+          data.quantity = tokens[13];
         } else {
           data.slotNo = tokens[6] || '1';
           data.partNo = tokens[7] || '';
