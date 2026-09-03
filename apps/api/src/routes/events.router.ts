@@ -25,10 +25,14 @@ eventsRouter.get('/ingress', async (req: Request, res: Response) => {
     const db = getDatabase();
     const { limit = 50 } = req.query;
     const rows = await db.query(
-      'SELECT * FROM ingress_events ORDER BY received_at DESC NULLS LAST, id DESC LIMIT ?',
+      'SELECT id, source_adapter, source_address, protocol, raw_payload, decoded_payload, sequence_id, processed_status, received_at FROM ingress_events ORDER BY received_at DESC NULLS LAST, id DESC LIMIT ?',
       [Number(limit)]
     );
-    res.json(rows);
+    const formatted = rows.map((r: any) => ({
+      ...r,
+      raw_payload: r.decoded_payload || (Buffer.isBuffer(r.raw_payload) ? r.raw_payload.toString('utf-8') : String(r.raw_payload || ''))
+    }));
+    res.json(formatted);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getDatabase } from '../db/database';
 import { EventIngestionService } from '../services/event-ingestion.service';
+import { SmtInterlockService } from '../services/smt-interlock.service';
 
 export const smtRouter = Router();
 
@@ -38,34 +39,22 @@ smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
     const db = getDatabase();
     const { workCenterId = 'wc-nxt-01', slotNo, scannedReelId, scannedPartNumber, operatorId = 'op-smt-01' } = req.body;
 
-    const slotRows = await db.query(`
-      SELECT assigned_part_number, feeder_id, current_reel_id
-      FROM smt_feeder_slots
-      WHERE work_center_id = ? AND slot_no = ?
-    `, [workCenterId, slotNo]);
-
-    if (slotRows.length === 0) {
-      res.status(404).json({ verified: false, message: `Slot ${slotNo} not configured.` });
-      return;
-    }
-
-    const expectedPart = slotRows[0].assigned_part_number;
-    const isMatch = scannedPartNumber.trim().toUpperCase() === expectedPart.trim().toUpperCase();
+    const decision = await SmtInterlockService.verifyFeederSplice(workCenterId, slotNo, scannedPartNumber);
 
     // Check MSL from reel database if exists
     const reelRows = await db.query('SELECT * FROM component_reels WHERE reel_id = ?', [scannedReelId]);
     const mslMinutes = reelRows.length > 0 ? reelRows[0].msl_remaining_minutes : 999999;
     const isMslExpired = mslMinutes <= 0;
 
-    if (!isMatch) {
+    if (!decision.allowed) {
       res.status(400).json({
         verified: false,
         valid: false,
         decision: 'BLOCKED_MISMATCH',
         machineAction: 'INTERLOCK_TRIPPED_HALT_FEEDER',
         error: 'MISMATCHED_PART_NUMBER',
-        message: `FATAL: Slot ${slotNo} requires part ${expectedPart}, but scanned reel is ${scannedPartNumber}! Halting feeder.`,
-        expectedPartNumber: expectedPart,
+        message: `FATAL: Slot ${slotNo} requires part ${decision.expectedPartNumber}, but scanned reel is ${scannedPartNumber}! Halting feeder.`,
+        expectedPartNumber: decision.expectedPartNumber,
         scannedPartNumber
       });
       return;
@@ -79,7 +68,7 @@ smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
         machineAction: 'INTERLOCK_TRIPPED_HALT_FEEDER',
         error: 'MSL_EXPIRED',
         message: `WARNING: Reel ${scannedReelId} has exceeded its moisture floor life (${mslMinutes} mins left)! Requires baking.`,
-        expectedPartNumber: expectedPart,
+        expectedPartNumber: decision.expectedPartNumber,
         scannedPartNumber
       });
       return;
@@ -96,9 +85,9 @@ smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
         slotNo: Number(slotNo),
         moduleNo: 1,
         stageNo: 1,
-        feederId: slotRows[0].feeder_id,
+        feederId: decision.feederId || 'FID-W08F-01',
         partNumber: scannedPartNumber,
-        oldReelId: slotRows[0].current_reel_id || 'REEL-DEPLETED',
+        oldReelId: decision.currentReelId || 'REEL-DEPLETED',
         newReelId: scannedReelId,
         newReelQuantity: 10000,
         mslRemainingMinutes: mslMinutes,
@@ -111,8 +100,8 @@ smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
       valid: true,
       decision: 'APPROVED',
       machineAction: 'ENGAGE_FEEDER_PICKUP',
-      message: `Verified & Spliced: Reel ${scannedReelId} matched slot ${slotNo} (${expectedPart}).`,
-      expectedPartNumber: expectedPart,
+      message: `Verified & Spliced: Reel ${scannedReelId} matched slot ${slotNo} (${decision.expectedPartNumber}).`,
+      expectedPartNumber: decision.expectedPartNumber,
       scannedPartNumber,
       mslRemainingMinutes: mslMinutes
     });

@@ -213,7 +213,8 @@ CREATE TABLE IF NOT EXISTS ingress_events (
   source_adapter VARCHAR(64) NOT NULL,
   source_address VARCHAR(128),
   protocol VARCHAR(32) NOT NULL,
-  raw_payload TEXT NOT NULL,
+  raw_payload BLOB NOT NULL,
+  decoded_payload TEXT,
   sequence_id BIGINT,
   processed_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
   received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

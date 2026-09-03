@@ -8,6 +8,7 @@ export interface IDatabase {
   execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid?: number }>;
   execScript(sqlScript: string): Promise<void>;
   close(): Promise<void>;
+  withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T>;
 }
 
 class NodeSqliteDatabase implements IDatabase {
@@ -35,6 +36,22 @@ class NodeSqliteDatabase implements IDatabase {
 
   async close(): Promise<void> {
     this.db.close();
+  }
+
+  async withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T> {
+    this.db.exec('BEGIN IMMEDIATE;');
+    try {
+      const result = await fn(this);
+      this.db.exec('COMMIT;');
+      return result;
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK;');
+      } catch {
+        // Ignored if already rolled back
+      }
+      throw error;
+    }
   }
 }
 
@@ -66,6 +83,40 @@ class PostgresDatabase implements IDatabase {
   async close(): Promise<void> {
     await this.pool.end();
   }
+
+  async withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const txDb: IDatabase = {
+        query: async (sql, params = []) => {
+          let index = 1;
+          const pgSql = sql.replace(/\?/g, () => `$${index++}`);
+          const res = await client.query(pgSql, params);
+          return res.rows;
+        },
+        execute: async (sql, params = []) => {
+          let index = 1;
+          const pgSql = sql.replace(/\?/g, () => `$${index++}`);
+          const res = await client.query(pgSql, params);
+          return { changes: res.rowCount ?? 0 };
+        },
+        execScript: async (sqlScript) => {
+          await client.query(sqlScript);
+        },
+        close: async () => {},
+        withTransaction: (nestedFn) => nestedFn(txDb)
+      };
+      const result = await fn(txDb);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 let dbInstance: IDatabase | null = null;
@@ -91,5 +142,10 @@ export async function initDatabase(): Promise<void> {
   const schemaPath = path.resolve(__dirname, 'schema.sql');
   const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
   await db.execScript(schemaSql);
+  try {
+    await db.execute('ALTER TABLE ingress_events ADD COLUMN decoded_payload TEXT;');
+  } catch {
+    // Column already exists
+  }
   console.log('[DB] Schema verified and initialized.');
 }

@@ -23,6 +23,7 @@ export const CanonicalEventTypeEnum = z.enum([
   'BATCH_COMPLETED'
 ]);
 export type CanonicalEventType = z.infer<typeof CanonicalEventTypeEnum>;
+export type MesEventType = CanonicalEventType;
 
 export const SourceTypeEnum = z.enum([
   'MANUAL_UI',

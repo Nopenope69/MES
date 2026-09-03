@@ -186,15 +186,25 @@ export async function seedDatabase(): Promise<void> {
       ('mc-04', 'job-01', 'REEL-QCT-77821', 'MOD-QUECTEL-EC200U', 'Quectel 4G Module', 1.0, 'PCS', 'FID-W24F-04 (Slot 4)', 'op-smt-01', ?)
   `, [now, now, now, now]);
 
-  // Seed sample Tier 1 Ingress TCP frames
+  // Seed sample Tier 1 Ingress TCP frames with raw BLOB and decoded text
+  const p1 = '\x02MCSTATECHANGE\t55329\t20260903120000\tLINE01\tNXT01\t1\t3\t5\x03';
+  const p2 = '\x02PRODCOMPLETEII\t55330\t20260903120018\tLINE01\tNXT01\t1\t1\t0\tPROG-SM-METER-TOP-REV4\t140\t4\t0\t0x00\t18.24\x03';
+  const p3 = '\x02PDERROR\t55331\t20260903120020\tLINE01\tNXT01\t1\t1\t1\tFID-W08F-01\tC0402-100NF-16V\tNOZ-0402-A\tHEAD-01\tEMPTY_PICKUP\t0x04\x03';
+  const p4 = '\x02CHANGECOMPII\t55332\t20260903120025\tLINE01\tNXT01\t1\t1\t1\t1\tC0402-100NF-16V\tFID-W08F-01\tREEL-OLD\tREEL-MUR-98125-SPLICE\t10000\x03';
+
   await db.execute(`
-    INSERT INTO ingress_events (id, source_adapter, source_address, protocol, raw_payload, received_at, processed_status)
+    INSERT INTO ingress_events (id, source_adapter, source_address, protocol, raw_payload, decoded_payload, received_at, processed_status)
     VALUES
-      ('ing-01', 'FUJI_NEXIM', '192.168.10.42:30040', 'TCP_ASCII_STX_ETX', '\x02MCSTATECHANGE\t55329\t20260903120000\tLINE01\tNXT01\t1\t3\t5\x03', ?, 'PROCESSED'),
-      ('ing-02', 'FUJI_NEXIM', '192.168.10.42:30040', 'TCP_ASCII_STX_ETX', '\x02PRODCOMPLETEII\t55330\t20260903120018\tLINE01\tNXT01\t1\t1\t0\tPROG-SM-METER-TOP-REV4\t140\t4\t0\t0x00\t18.24\x03', ?, 'PROCESSED'),
-      ('ing-03', 'FUJI_NEXIM', '192.168.10.42:30040', 'TCP_ASCII_STX_ETX', '\x02PDERROR\t55331\t20260903120020\tLINE01\tNXT01\t1\t1\t1\tFID-W08F-01\tC0402-100NF-16V\tNOZ-0402-A\tHEAD-01\tEMPTY_PICKUP\t0x04\x03', ?, 'PROCESSED'),
-      ('ing-04', 'FUJI_NEXIM', '192.168.10.42:30040', 'TCP_ASCII_STX_ETX', '\x02CHANGECOMPII\t55332\t20260903120025\tLINE01\tNXT01\t1\t1\t1\t1\tC0402-100NF-16V\tFID-W08F-01\tREEL-OLD\tREEL-MUR-98125-SPLICE\t10000\x03', ?, 'PROCESSED')
-  `, [now, now, now, now]);
+      ('ing-01', 'FUJI_NEXIM', '192.168.10.42:30040', 'TCP_ASCII_STX_ETX', ?, ?, ?, 'PROCESSED'),
+      ('ing-02', 'FUJI_NEXIM', '192.168.10.42:30040', 'TCP_ASCII_STX_ETX', ?, ?, ?, 'PROCESSED'),
+      ('ing-03', 'FUJI_NEXIM', '192.168.10.42:30040', 'TCP_ASCII_STX_ETX', ?, ?, ?, 'PROCESSED'),
+      ('ing-04', 'FUJI_NEXIM', '192.168.10.42:30040', 'TCP_ASCII_STX_ETX', ?, ?, ?, 'PROCESSED')
+  `, [
+    Buffer.from(p1, 'utf-8'), p1, now,
+    Buffer.from(p2, 'utf-8'), p2, now,
+    Buffer.from(p3, 'utf-8'), p3, now,
+    Buffer.from(p4, 'utf-8'), p4, now
+  ]);
 
   console.log('[SEED] Dixon SMT Line 01 successfully populated with authentic high-speed SMT data.');
 }

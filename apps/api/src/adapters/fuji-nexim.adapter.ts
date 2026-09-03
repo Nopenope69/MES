@@ -7,6 +7,7 @@ import {
   MesEventEnvelope
 } from '@mes/shared';
 import { EventIngestionService } from '../services/event-ingestion.service';
+import { SmtInterlockService } from '../services/smt-interlock.service';
 import { getDatabase } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -14,7 +15,8 @@ import { v4 as uuidv4 } from 'uuid';
  * Production Fuji Nexim TCP Socket Gateway.
  * Implements the Fuji Host Interface Specification V2.8.0.
  * Decodes Big-Endian length + STX (0x02) / ETX (0x03) packets.
- * Includes closed-loop Splicing Verification Interlock (rejects mismatched reels with Result=1).
+ * Includes stream frame accumulator for fragmented/coalesced TCP packets.
+ * Includes closed-loop Splicing Verification Interlock (ADR-003 decoupled).
  */
 export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
   readonly adapterId = 'FujiNeximAdapter';
@@ -22,6 +24,50 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
   readonly sourceType = 'INTEGRATION_SOCKET';
   private server: net.Server | null = null;
   private isRunning = false;
+
+  /**
+   * Streaming TCP Frame Extractor.
+   * Handles arbitrary packet segmentation, chunk fragmentation, and packet coalescing.
+   * Extracts all complete STX/ETX frames from the buffer and returns them alongside the unconsumed remainder.
+   */
+  public static extractFrames(buffer: Buffer): { frames: Buffer[]; remainder: Buffer } {
+    const frames: Buffer[] = [];
+    let offset = 0;
+
+    while (buffer.length - offset >= FUJI_FRAMING.HEADER_SIZE + 2) {
+      const totalLength = buffer.readUInt32BE(offset);
+      const fullFrameSize = FUJI_FRAMING.HEADER_SIZE + totalLength;
+
+      // Sanity check: totalLength must be reasonable (e.g. <= 65536 bytes) and at least 2 bytes (STX+ETX)
+      if (totalLength < 2 || totalLength > 65536) {
+        // Corrupted length header: scan forward by 1 byte to re-synchronize
+        offset += 1;
+        continue;
+      }
+
+      if (buffer.length - offset < fullFrameSize) {
+        // Incomplete frame; wait for additional TCP chunks
+        break;
+      }
+
+      const stx = buffer[offset + FUJI_FRAMING.HEADER_SIZE];
+      const etx = buffer[offset + fullFrameSize - 1];
+
+      if (stx === FUJI_FRAMING.STX && etx === FUJI_FRAMING.ETX) {
+        // Complete, valid frame
+        frames.push(buffer.subarray(offset, offset + fullFrameSize));
+        offset += fullFrameSize;
+      } else {
+        // Corrupted frame boundary: scan forward by 1 byte to find next valid STX header
+        offset += 1;
+      }
+    }
+
+    return {
+      frames,
+      remainder: buffer.subarray(offset)
+    };
+  }
 
   public parseRawFrame(buffer: Buffer): { command: FujiCommand; seqId: number; payloadRaw: string; tokens: string[] } | null {
     if (buffer.length < FUJI_FRAMING.HEADER_SIZE + 2) return null;
@@ -88,7 +134,7 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
           workCenterId,
           payload: {
             panelBarcode: parsedData.panelNo ? `PNL-${parsedData.panelNo}` : 'PNL-AUTO',
-            programName: parsedData.programName || 'PROG-SM-METER-TOP-REV4',
+            programName: parsedData.programName || 'UNKNOWN',
             cycleTimeSeconds: 0,
             blockCount: 1,
             blockSkipCount: 0
@@ -96,7 +142,6 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
         };
       }
 
-      case 'PRODCOMPLETED':
       case 'PRODCOMPLETEII': {
         return {
           eventId: uuidv4(),
@@ -109,22 +154,22 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
           siteId: 'SITE-NOIDA-P4',
           workCenterId,
           payload: {
-            panelBarcode: parsedData.panelNo ? `PNL-${parsedData.panelNo}` : `PNL-${Date.now().toString().slice(-6)}`,
-            programName: parsedData.programName || 'PROG-SM-METER-TOP-REV4',
-            moduleNo: Number(parsedData.moduleNo) || 1,
-            laneNo: Number(parsedData.laneNo) || 1,
-            cycleTimeSeconds: parseFloat(parsedData.cycleTime) || 18.5,
-            blockCount: parseInt(parsedData.blockCount, 10) || 4,
-            blockSkipCount: parseInt(parsedData.blockSkipCount, 10) || 0,
-            skipBitmask: parsedData.bsInfoBit
+            panelBarcode: parsedData.panelNo ? `PNL-${parsedData.panelNo}` : `PNL-SEQ-${seqId}`,
+            programName: parsedData.programName,
+            moduleNo: parseInt(parsedData.moduleNo || '1', 10),
+            laneNo: parseInt(parsedData.laneNo || '1', 10),
+            cycleTimeSeconds: parseFloat(parsedData.cycleTime || '18.2'),
+            blockCount: parseInt(parsedData.blockCount || '4', 10),
+            blockSkipCount: parseInt(parsedData.blockSkipCount || '0', 10),
+            skipBitmask: parsedData.bsInfoBit || '0x00'
           }
         };
       }
 
-      case 'LOADCOMP':
-      case 'LOADCOMPIV':
       case 'CHANGECOMP':
-      case 'CHANGECOMPII': {
+      case 'CHANGECOMPII':
+      case 'LOADCOMP':
+      case 'LOADCOMPIV': {
         return {
           eventId: uuidv4(),
           eventType: 'REEL_SPLICED',
@@ -136,17 +181,17 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
           siteId: 'SITE-NOIDA-P4',
           workCenterId,
           payload: {
-            slotNo: parseInt(parsedData.slotNo, 10) || 1,
-            moduleNo: parseInt(parsedData.moduleNo, 10) || 1,
-            stageNo: parseInt(parsedData.stageNo, 10) || 1,
+            slotNo: parseInt(parsedData.slotNo || '1', 10),
+            moduleNo: parseInt(parsedData.moduleNo || '1', 10),
+            stageNo: parseInt(parsedData.stageNo || '1', 10),
             feederId: parsedData.feederId || 'FID-W08F-01',
-            partNumber: parsedData.partNo || 'C0402-100NF-16V',
+            partNumber: parsedData.partNo || '',
             oldReelId: parsedData.oldReelId || 'REEL-OLD',
-            newReelId: parsedData.newReelId || parsedData.reelId || 'REEL-NEW',
+            newReelId: parsedData.newReelId || 'REEL-NEW',
             newReelLotNumber: parsedData.lotNo || 'LOT-AUTO',
-            newReelVendor: parsedData.vendor || 'Supplier',
-            newReelQuantity: parseInt(parsedData.quantity, 10) || 10000,
-            mslRemainingMinutes: parseInt(parsedData.remainingTime, 10) || 999999
+            newReelVendor: 'Supplier',
+            newReelQuantity: parseInt(parsedData.quantity || '10000', 10),
+            mslRemainingMinutes: 999999
           }
         };
       }
@@ -163,9 +208,9 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
           siteId: 'SITE-NOIDA-P4',
           workCenterId,
           payload: {
-            moduleNo: parseInt(parsedData.moduleNo, 10) || 1,
-            stageNo: parseInt(parsedData.stageNo, 10) || 1,
-            slotNo: parseInt(parsedData.slotNo, 10) || 1,
+            moduleNo: parseInt(parsedData.moduleNo || '1', 10),
+            stageNo: parseInt(parsedData.stageNo || '1', 10),
+            slotNo: parseInt(parsedData.slotNo || '1', 10),
             partNumber: parsedData.partNo || 'UNKNOWN-PART',
             feederId: parsedData.feederId || 'FEEDER-01',
             nozzleId: parsedData.nozzleId || 'NOZZLE-01',
@@ -201,24 +246,16 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
   }
 
   /**
-   * Splicing verification interlock.
-   * Checks if the scanned part number matches the assigned BOM part for that slot.
+   * Splicing verification interlock (ADR-003 Decoupled).
+   * Delegates domain validation to SmtInterlockService with zero SQL knowledge in the adapter.
    */
   public async verifySplicingInterlock(slotNo: number, partNumber: string, workCenterId: string): Promise<boolean> {
-    const db = getDatabase();
-    const rows = await db.query(
-      'SELECT assigned_part_number FROM smt_feeder_slots WHERE work_center_id = ? AND slot_no = ?',
-      [workCenterId, slotNo]
-    );
-
-    if (rows.length === 0) return true; // Default allow if slot is not explicitly restricted
-    const expectedPart = rows[0].assigned_part_number;
-    return expectedPart === partNumber;
+    const decision = await SmtInterlockService.verifyFeederSplice(workCenterId, slotNo, partNumber);
+    return decision.allowed;
   }
 
   public parseCommandTokens(command: FujiCommand, tokens: string[]): Record<string, any> {
     const data: Record<string, any> = {};
-    if (!tokens || tokens.length < 2) return data;
 
     switch (command) {
       case 'MCSTATECHANGE':
@@ -226,8 +263,8 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
         data.lineName = tokens[3];
         data.machineName = tokens[4];
         data.moduleNo = tokens[5];
-        data.previousStatus = parseInt(tokens[6] || '3', 10);
-        data.currentStatus = parseInt(tokens[7] || '5', 10);
+        data.previousStatus = parseInt(tokens[6], 10);
+        data.currentStatus = parseInt(tokens[7], 10);
         break;
 
       case 'PRODSTARTED':
@@ -241,7 +278,6 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
         data.panelNo = tokens[9];
         break;
 
-      case 'PRODCOMPLETED':
       case 'PRODCOMPLETEII':
         data.time = tokens[2];
         data.lineName = tokens[3];
@@ -315,70 +351,98 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
     return data;
   }
 
+  /**
+   * Processes a single extracted frame with BLOB preservation and decoupled interlock checking.
+   */
+  public async processSingleFrame(socket: net.Socket, frame: Buffer, workCenterId: string): Promise<void> {
+    const db = getDatabase();
+    const ingressId = uuidv4();
+    const decodedPayload = frame.toString('utf-8');
+
+    // Tier 1 Ingress: Preserve verbatim raw bytes as BLOB + decoded text
+    await db.execute(`
+      INSERT INTO ingress_events (
+        id, source_adapter, source_address, protocol, raw_payload, decoded_payload, processed_status
+      ) VALUES (?, ?, ?, 'TCP_ASCII_STX_ETX', ?, ?, 'PROCESSED')
+    `, [
+      ingressId,
+      'FUJI_NEXIM',
+      `${socket.remoteAddress || '127.0.0.1'}:${socket.remotePort || 0}`,
+      frame,
+      decodedPayload
+    ]);
+
+    const parsed = this.parseRawFrame(frame);
+    if (!parsed) return;
+
+    // Handle Heartbeat Liveness (120s / 30s)
+    if (parsed.command === 'KEEPALIVE') {
+      socket.write(this.buildAckFrame('KEEPALIVE', parsed.seqId, true));
+      return;
+    }
+
+    // Handle Protocol Start Handshake
+    if (parsed.command === 'SETEV') {
+      socket.write(this.buildAckFrame('SETEV', parsed.seqId, true, ['NXT01']));
+      return;
+    }
+    if (parsed.command === 'STARTEV') {
+      socket.write(this.buildAckFrame('STARTEV', parsed.seqId, true, ['NXT01']));
+      return;
+    }
+
+    const fields = this.parseCommandTokens(parsed.command, parsed.tokens);
+
+    // Splicing & Part Load Interlock (Decoupled domain call per ADR-003)
+    if (parsed.command === 'LOADCOMP' || parsed.command === 'LOADCOMPIV' || parsed.command === 'CHANGECOMP' || parsed.command === 'CHANGECOMPII') {
+      const slotNo = parseInt(fields.slotNo || parsed.tokens[8] || parsed.tokens[3] || '1', 10);
+      const partNo = fields.partNo || parsed.tokens[9] || parsed.tokens[4] || '';
+
+      const decision = await SmtInterlockService.verifyFeederSplice(workCenterId, slotNo, partNo);
+      if (!decision.allowed) {
+        console.warn(`[Fuji Gateway] SPLICING INTERLOCK BLOCKED: Slot ${slotNo} expected ${decision.expectedPartNumber}, received ${partNo}. Halting feeder!`);
+        socket.write(this.buildAckFrame(parsed.command, parsed.seqId, false)); // Result = 1 (NG)
+        return;
+      }
+    }
+
+    // Project Canonical Event
+    const canonical = this.toCanonicalEvent(parsed.command, parsed.seqId, fields, workCenterId);
+    if (canonical) {
+      canonical.ingressEventId = ingressId;
+      await EventIngestionService.ingest(canonical);
+    }
+
+    // Respond OK ACK
+    socket.write(this.buildAckFrame(parsed.command, parsed.seqId, true));
+  }
+
   public startListener(port = 30040, workCenterId = 'wc-nxt-01'): void {
     if (this.isRunning) return;
 
     this.server = net.createServer((socket) => {
       console.log(`[Fuji Gateway] SMT Machine connected from ${socket.remoteAddress}:${socket.remotePort}`);
 
-      socket.on('data', async (data) => {
-        const db = getDatabase();
-        const ingressId = uuidv4();
+      let socketBuffer = Buffer.alloc(0);
 
-        // Tier 1 Ingress: Preserve raw socket frame verbatim
-        await db.execute(`
-          INSERT INTO ingress_events (
-            id, source_adapter, source_address, protocol, raw_payload, processed_status
-          ) VALUES (?, ?, ?, 'TCP_ASCII_STX_ETX', ?, 'RECEIVED')
-        `, [ingressId, 'FUJI_NEXIM', `${socket.remoteAddress}:${socket.remotePort}`, data.toString('utf-8')]);
+      socket.on('data', async (chunk: Buffer) => {
+        socketBuffer = Buffer.concat([socketBuffer, chunk]);
 
-        const parsed = this.parseRawFrame(data);
-        if (!parsed) return;
+        const { frames, remainder } = FujiNeximAdapter.extractFrames(socketBuffer);
+        socketBuffer = Buffer.from(remainder);
 
-        // Handle Heartbeat Liveness (120s / 30s)
-        if (parsed.command === 'KEEPALIVE') {
-          socket.write(this.buildAckFrame('KEEPALIVE', parsed.seqId, true));
-          return;
+        for (const frame of frames) {
+          await this.processSingleFrame(socket, frame, workCenterId);
         }
-
-        // Handle Protocol Start Handshake
-        if (parsed.command === 'SETEV') {
-          socket.write(this.buildAckFrame('SETEV', parsed.seqId, true, ['NXT01']));
-          return;
-        }
-        if (parsed.command === 'STARTEV') {
-          socket.write(this.buildAckFrame('STARTEV', parsed.seqId, true, ['NXT01']));
-          return;
-        }
-
-        const fields = this.parseCommandTokens(parsed.command, parsed.tokens);
-
-        // Splicing & Part Load Interlock
-        if (parsed.command === 'LOADCOMP' || parsed.command === 'LOADCOMPIV' || parsed.command === 'CHANGECOMP' || parsed.command === 'CHANGECOMPII') {
-          const slotNo = parseInt(fields.slotNo || parsed.tokens[3] || '1', 10);
-          const partNo = fields.partNo || parsed.tokens[4] || '';
-
-          const isAllowed = await this.verifySplicingInterlock(slotNo, partNo, workCenterId);
-          if (!isAllowed) {
-            console.warn(`[Fuji Gateway] SPLICING INTERLOCK BLOCKED: Slot ${slotNo} expected correct part, received ${partNo}. Halting feeder!`);
-            socket.write(this.buildAckFrame(parsed.command, parsed.seqId, false)); // Result = 1 (NG)
-            return;
-          }
-        }
-
-        // Project Canonical Event
-        const canonical = this.toCanonicalEvent(parsed.command, parsed.seqId, fields, workCenterId);
-        if (canonical) {
-          canonical.ingressEventId = ingressId;
-          await EventIngestionService.ingest(canonical);
-        }
-
-        // Respond OK ACK
-        socket.write(this.buildAckFrame(parsed.command, parsed.seqId, true));
       });
 
       socket.on('close', () => {
+        socketBuffer = Buffer.alloc(0);
         console.log('[Fuji Gateway] SMT Machine disconnected.');
+      });
+
+      socket.on('error', (err) => {
+        console.error('[Fuji Gateway] Socket error:', err.message);
       });
     });
 
