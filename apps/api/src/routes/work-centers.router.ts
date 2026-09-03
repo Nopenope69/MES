@@ -21,7 +21,14 @@ workCentersRouter.get('/', async (_req: Request, res: Response) => {
       LEFT JOIN batches b ON wc.current_batch_id = b.id
       LEFT JOIN products p ON b.product_code = p.code
       LEFT JOIN operators op ON wc.current_operator_id = op.id
-      ORDER BY wc.code ASC
+      ORDER BY 
+        CASE wc.type 
+          WHEN 'SCREEN_PRINTER' THEN 1 
+          WHEN 'PICK_AND_PLACE' THEN 2 
+          WHEN 'REFLOW_OVEN' THEN 3 
+          WHEN 'AOI_INSPECTION' THEN 4 
+          ELSE 5 
+        END ASC
     `);
 
     res.json(rows);

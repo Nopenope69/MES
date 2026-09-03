@@ -313,21 +313,22 @@ export const OperatorStation: React.FC = () => {
 
             {/* Feeder Slot Rail Layout */}
             <div className="space-y-2.5 pt-1">
-              {feeders.map((slot) => {
-                const isSelected = slot.slot_no === activeSlotNo;
-                const isLowParts = (slot.reel_remaining_quantity || 0) < 4000;
-                const isMslSensitive = (slot.msl_level || 1) > 1;
+              {feeders.length > 0 ? (
+                feeders.map((slot) => {
+                  const isSelected = slot.slot_no === activeSlotNo;
+                  const isLowParts = (slot.reel_remaining_quantity || 0) < 4000;
+                  const isMslSensitive = (slot.msl_level || 1) > 1;
 
-                return (
-                  <div
-                    key={slot.id}
-                    onClick={() => handleSelectSlot(slot)}
-                    className={`milled-slot p-3.5 rounded-xl cursor-pointer transition-all flex flex-wrap items-center justify-between gap-4 border ${
-                      isSelected 
-                        ? 'border-[#00E699] bg-[#1B2533] shadow-md ring-1 ring-[#00E699]/40' 
-                        : 'border-white/5 hover:border-white/20'
-                    }`}
-                  >
+                  return (
+                    <div
+                      key={slot.id}
+                      onClick={() => handleSelectSlot(slot)}
+                      className={`milled-slot p-3.5 rounded-xl cursor-pointer transition-all flex flex-wrap items-center justify-between gap-4 border ${
+                        isSelected 
+                          ? 'border-[#00E699] bg-[#1B2533] shadow-md ring-1 ring-[#00E699]/40' 
+                          : 'border-white/5 hover:border-white/20'
+                      }`}
+                    >
                     {/* Cassette Slot & Andon Light */}
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-[#0F151E] border border-white/10 flex flex-col items-center justify-center font-mono">
@@ -386,7 +387,27 @@ export const OperatorStation: React.FC = () => {
                     </div>
                   </div>
                 );
-              })}
+              })
+            ) : (
+              <div className="p-8 text-center bg-[#0C1117] rounded-xl border border-white/10 space-y-3">
+                <div className="text-sm font-bold text-white">
+                  {activeWc?.name || 'Selected Station'} does not host mechanical component feeder cassettes.
+                </div>
+                <p className="text-xs text-[#7A8A9E] max-w-md mx-auto">
+                  Component reels, tape cassettes, and optical splicing interlocks are located on the pick-and-place stage (Fuji NXT III M6).
+                </p>
+                <button
+                  onClick={() => {
+                    const nxt = workCenters.find(w => w.type === 'PICK_AND_PLACE' || w.id === 'wc-nxt-01');
+                    if (nxt) setSelectedWcId(nxt.id);
+                  }}
+                  className="px-4 py-2 bg-[#00E699] text-[#0B0F14] font-mono font-bold text-xs rounded-lg shadow-lg hover:bg-[#00E699]/90 transition-all inline-flex items-center gap-2"
+                >
+                  <span>SWITCH TO FUJI NXT III FEEDER BAY (STAGE 02)</span>
+                  <span>&rarr;</span>
+                </button>
+              </div>
+            )}
             </div>
           </div>
         </div>
@@ -394,20 +415,37 @@ export const OperatorStation: React.FC = () => {
         {/* Right Column (5 cols): Laser Splicing Reticle Dock */}
         <div className="lg:col-span-5 space-y-4">
           <div className="milled-panel rounded-xl p-5 space-y-5 border-t-2 border-t-[#00E699]">
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#00E699] flex items-center gap-1.5">
-                  <Disc className="w-3.5 h-3.5 animate-spin" />
-                  OPTICAL SPLICING DOCK
+            {feeders.length === 0 ? (
+              <div className="p-8 text-center bg-[#0A0E13] rounded-xl border border-white/10 space-y-3 font-mono">
+                <span className="text-xs text-[#7A8A9E] block">
+                  Reel verification and optical interlocks are mounted on Stage 02 (Fuji NXT III).
                 </span>
-                <h3 className="text-lg font-bold text-white font-sans mt-0.5">
-                  Slot 0{activeSlot?.slot_no} Interlock Verification
-                </h3>
+                <button
+                  onClick={() => {
+                    const nxt = workCenters.find(w => w.type === 'PICK_AND_PLACE' || w.id === 'wc-nxt-01');
+                    if (nxt) setSelectedWcId(nxt.id);
+                  }}
+                  className="px-3 py-1.5 bg-[#00E699]/15 border border-[#00E699]/40 hover:bg-[#00E699]/25 text-[#00E699] font-bold text-xs rounded-lg transition-all"
+                >
+                  Select Fuji NXT III &rarr;
+                </button>
               </div>
-              <span className="text-xs font-mono text-[#7A8A9E] bg-[#0A0E13] px-2 py-1 rounded border border-white/10">
-                {activeSlot?.feeder_id}
-              </span>
-            </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-[#00E699] flex items-center gap-1.5">
+                      <Disc className="w-3.5 h-3.5 animate-spin" />
+                      OPTICAL SPLICING DOCK
+                    </span>
+                    <h3 className="text-lg font-bold text-white font-sans mt-0.5">
+                      Slot 0{activeSlot?.slot_no} Interlock Verification
+                    </h3>
+                  </div>
+                  <span className="text-xs font-mono text-[#7A8A9E] bg-[#0A0E13] px-2 py-1 rounded border border-white/10">
+                    {activeSlot?.feeder_id}
+                  </span>
+                </div>
 
             {/* Split Comparison Terminal */}
             <div className="space-y-3 font-mono text-xs">
@@ -513,6 +551,8 @@ export const OperatorStation: React.FC = () => {
               <QrCode className="w-4 h-4" />
               <span>{isScanning ? 'SCANNING REEL BARCODE...' : 'RUN LASER SCAN & VERIFY SPLICE'}</span>
             </button>
+            </>
+          )}
           </div>
         </div>
       </div>
