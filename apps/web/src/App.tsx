@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { 
   Tablet, Activity, GitFork, Terminal, Shield, 
-  Cpu, Radio, AlertCircle
+  Cpu, Radio, AlertCircle, Layers
 } from 'lucide-react';
+import { SolderPasteStation } from './components/SolderPasteStation';
 import { OperatorStation } from './components/OperatorStation';
 import { SupervisorDashboard } from './components/SupervisorDashboard';
 import { GenealogyExplorer } from './components/GenealogyExplorer';
 import { AuditTrailViewer } from './components/AuditTrailViewer';
 
-type NavTab = 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL';
+type NavTab = 'SOLDER_PASTE' | 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('OPERATOR');
@@ -60,6 +61,18 @@ export const App: React.FC = () => {
 
           {/* Tactile Navigation Switches */}
           <nav className="flex items-center gap-1 bg-[#0A0E13] p-1 rounded-xl border border-white/10 text-xs font-mono">
+            <button
+              onClick={() => setActiveTab('SOLDER_PASTE')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                activeTab === 'SOLDER_PASTE' 
+                  ? 'bg-[#1D2735] text-[#00E699] font-bold border border-[#00E699]/40 shadow-sm' 
+                  : 'text-[#7A8A9E] hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>00 // SOLDER PASTE</span>
+            </button>
+
             <button
               onClick={() => setActiveTab('OPERATOR')}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
@@ -113,6 +126,7 @@ export const App: React.FC = () => {
 
       {/* Main Instrument Display Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        {activeTab === 'SOLDER_PASTE' && <SolderPasteStation />}
         {activeTab === 'OPERATOR' && <OperatorStation />}
         {activeTab === 'SUPERVISOR' && <SupervisorDashboard />}
         {activeTab === 'GENEALOGY' && <GenealogyExplorer />}

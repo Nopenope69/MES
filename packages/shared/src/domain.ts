@@ -142,8 +142,90 @@ export interface ComponentReel {
   currentQuantity: number;
   unit: string;                // "PCS"
   mslLevel: number;            // Moisture Sensitivity Level: 1 (unlimited) to 6
-  mslRemainingMinutes: number; // Floor life remaining in minutes
+  mslClass?: MslClass;         // JEDEC Standard MSL Classification
+  mslRemainingMinutes: number; // Floor life remaining in minutes (derived read projection)
+  mbbOpenedAt?: string;
+  mbbResealedAt?: string;
+  storageLocation?: string;
+  storageState?: 'SEALED_MBB' | 'AMBIENT_EXPOSURE' | 'DRY_STORAGE' | 'BAKING';
+  floorClockState?: 'SEALED' | 'FLOOR_EXPOSURE' | 'DRY_STORAGE' | 'BAKE_REQUIRED' | 'BAKING';
+  floorLifeNominalMinutes?: number;
+  floorLifeExpiresAt?: string;
   status: 'READY' | 'MOUNTED' | 'SPLICED' | 'DEPLETED' | 'EXPIRED_MSL' | 'QUARANTINED';
+}
+
+export type MslClass = 'MSL_1' | 'MSL_2' | 'MSL_2A' | 'MSL_3' | 'MSL_4' | 'MSL_5' | 'MSL_5A' | 'MSL_6';
+
+export const JEDEC_NOMINAL_FLOOR_LIFE_MINUTES: Record<MslClass, number> = {
+  MSL_1: 999999, // Unlimited (<= 30C / 85% RH)
+  MSL_2: 525600, // 1 Year
+  MSL_2A: 40320, // 4 Weeks
+  MSL_3: 10080,  // 168 Hours (7 Days)
+  MSL_4: 4320,   // 72 Hours
+  MSL_5: 2880,   // 48 Hours
+  MSL_5A: 1440,  // 24 Hours
+  MSL_6: 0       // Mandatory Bake before use
+};
+
+export interface SolderPasteProfile {
+  id: string;
+  manufacturer: string;
+  productCode: string;
+  alloyType: string;
+  storageMinC: number;
+  storageMaxC: number;
+  thawRequiredMinutes: number;
+  minimumProcessingTemperatureC: number;
+  mixingRequired: boolean;
+  mixingMethod: string;
+  mixingMinSeconds: number;
+  mixingMaxSeconds: number;
+  stencilLifeMinutes: number;
+  shelfLifeDays: number;
+  standardOrTdsReference: string;
+  revision: string;
+  active: boolean;
+}
+
+export interface SolderPasteJar {
+  id: string;
+  jarId: string;
+  partNumber: string;
+  profileId: string;
+  alloyType: string;
+  lotNumber: string;
+  expiryDate: string;
+  status: 'REFRIGERATED' | 'THAWING' | 'THAWED' | 'MIXED' | 'AUTHORIZED' | 'ON_STENCIL' | 'DEPLETED' | 'EXPIRED' | 'DISCARDED';
+  removedFromColdAt?: string;
+  thawVerifiedAt?: string;
+  thawDurationMinutes: number;
+  temperatureVerifiedAt?: string;
+  temperatureVerifiedC?: number;
+  mixedAt?: string;
+  mixedDurationSeconds: number;
+  mixingMethod?: string;
+  currentStencilSessionId?: string;
+  currentWorkCenterId: string;
+}
+
+export interface Stencil {
+  id: string;
+  stencilId: string;
+  partNumber: string;
+  revision: string;
+  stencilSerialNumber: string;
+  status: 'AVAILABLE' | 'IN_USE' | 'CLEANING_REQUIRED' | 'SCRAPPED';
+}
+
+export interface StencilSession {
+  id: string;
+  stencilId: string;
+  workCenterId: string;
+  batchId?: string;
+  startedAt: string;
+  endedAt?: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'EXPIRED';
+  lifeExpiresAt?: string;
 }
 
 export interface FeederSlotMapping {
@@ -157,6 +239,8 @@ export interface FeederSlotMapping {
   assignedPartNumber: string;
   currentReelId?: string;
   currentReelQuantity?: number;
+  mslClass?: MslClass;
+  mslState?: string;
   mslRemainingMinutes?: number;
   status: 'OK' | 'LOW_PARTS' | 'PARTS_OUT' | 'WRONG_PART' | 'EMPTY';
 }

@@ -129,8 +129,143 @@ CREATE TABLE IF NOT EXISTS component_reels (
   current_quantity INTEGER NOT NULL,
   unit VARCHAR(16) NOT NULL DEFAULT 'PCS',
   msl_level INTEGER NOT NULL DEFAULT 1,
+  msl_class VARCHAR(8) NOT NULL DEFAULT 'MSL_1',
   msl_remaining_minutes INTEGER NOT NULL DEFAULT 999999,
-  status VARCHAR(32) NOT NULL DEFAULT 'READY' -- READY, MOUNTED, SPLICED, DEPLETED, EXPIRED_MSL
+  mbb_opened_at TIMESTAMP,
+  mbb_resealed_at TIMESTAMP,
+  storage_location VARCHAR(64) DEFAULT 'FACTORY_FLOOR',
+  storage_state VARCHAR(32) DEFAULT 'AMBIENT_EXPOSURE',
+  floor_clock_state VARCHAR(32) DEFAULT 'FLOOR_EXPOSURE',
+  floor_life_nominal_minutes INTEGER DEFAULT 999999,
+  floor_life_expires_at TIMESTAMP,
+  hic_status VARCHAR(32) DEFAULT 'OK',
+  hic_verified_at TIMESTAMP,
+  hic_verified_by VARCHAR(64),
+  bake_status VARCHAR(32) DEFAULT 'NOT_REQUIRED',
+  bake_started_at TIMESTAMP,
+  last_bake_profile_id VARCHAR(64),
+  last_bake_completed_at TIMESTAMP,
+  status VARCHAR(32) NOT NULL DEFAULT 'READY' -- READY, MOUNTED, SPLICED, DEPLETED, EXPIRED_MSL, QUARANTINED
+);
+
+-- JEDEC J-STD-033D Dry Cabinets Master Data
+CREATE TABLE IF NOT EXISTS dry_cabinets (
+  id VARCHAR(64) PRIMARY KEY,
+  code VARCHAR(32) UNIQUE NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  rh_limit_percent DECIMAL(5, 2) NOT NULL DEFAULT 5.0,
+  temperature_min_c DECIMAL(5, 2) NOT NULL DEFAULT 20.0,
+  temperature_max_c DECIMAL(5, 2) NOT NULL DEFAULT 30.0,
+  validation_status VARCHAR(32) NOT NULL DEFAULT 'VALIDATED',
+  last_calibrated_at TIMESTAMP
+);
+
+-- JEDEC J-STD-033D Bake Profiles (Thermal Desiccation Standards)
+CREATE TABLE IF NOT EXISTS msl_bake_profiles (
+  id VARCHAR(64) PRIMARY KEY,
+  standard VARCHAR(64) NOT NULL DEFAULT 'JEDEC_J_STD_033D',
+  standard_revision VARCHAR(16) NOT NULL DEFAULT 'D',
+  msl_class VARCHAR(8) NOT NULL,
+  package_thickness_class VARCHAR(32) NOT NULL DEFAULT 'THIN_LE_1_4MM',
+  temperature_c INTEGER NOT NULL,
+  minimum_duration_minutes INTEGER NOT NULL,
+  carrier_type VARCHAR(32) NOT NULL DEFAULT 'HIGH_TEMP_REEL',
+  max_bake_temperature_c INTEGER NOT NULL DEFAULT 125,
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+
+-- Historical MSL Exposure Interval Logs (Source for Computed-on-Read Algorithm)
+CREATE TABLE IF NOT EXISTS msl_exposure_logs (
+  id VARCHAR(64) PRIMARY KEY,
+  reel_id VARCHAR(64) NOT NULL,
+  state VARCHAR(32) NOT NULL, -- AMBIENT_EXPOSURE, DRY_STORAGE, BAKING
+  started_at TIMESTAMP NOT NULL,
+  ended_at TIMESTAMP,
+  duration_seconds INTEGER DEFAULT 0,
+  cabinet_id VARCHAR(64),
+  ambient_temperature_c DECIMAL(5, 2),
+  ambient_rh DECIMAL(5, 2),
+  source_event_id VARCHAR(64),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Solder Paste Profiles (Process Parameters)
+CREATE TABLE IF NOT EXISTS solder_paste_profiles (
+  id VARCHAR(64) PRIMARY KEY,
+  manufacturer VARCHAR(64) NOT NULL,
+  product_code VARCHAR(64) UNIQUE NOT NULL,
+  alloy_type VARCHAR(64) NOT NULL,
+  storage_min_c DECIMAL(5, 2) NOT NULL DEFAULT 2.0,
+  storage_max_c DECIMAL(5, 2) NOT NULL DEFAULT 10.0,
+  thaw_required_minutes INTEGER NOT NULL DEFAULT 240,
+  minimum_processing_temperature_c DECIMAL(5, 2) NOT NULL DEFAULT 22.0,
+  mixing_required INTEGER NOT NULL DEFAULT 1,
+  mixing_method VARCHAR(64) NOT NULL DEFAULT 'CENTRIFUGAL_PLANETARY',
+  mixing_min_seconds INTEGER NOT NULL DEFAULT 120,
+  mixing_max_seconds INTEGER NOT NULL DEFAULT 300,
+  stencil_life_minutes INTEGER NOT NULL DEFAULT 480,
+  shelf_life_days INTEGER NOT NULL DEFAULT 180,
+  standard_or_tds_reference VARCHAR(128) NOT NULL DEFAULT 'IPC-J-STD-004B',
+  revision VARCHAR(16) NOT NULL DEFAULT '1.0',
+  active INTEGER NOT NULL DEFAULT 1
+);
+
+-- Solder Paste Jars Tracking (Stage 01 Screen Printer)
+CREATE TABLE IF NOT EXISTS solder_paste_jars (
+  id VARCHAR(64) PRIMARY KEY,
+  jar_id VARCHAR(64) UNIQUE NOT NULL,
+  part_number VARCHAR(64) NOT NULL,
+  profile_id VARCHAR(64) NOT NULL,
+  alloy_type VARCHAR(64) NOT NULL,
+  lot_number VARCHAR(64) NOT NULL,
+  expiry_date TIMESTAMP NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'REFRIGERATED',
+  removed_from_cold_at TIMESTAMP,
+  thaw_verified_at TIMESTAMP,
+  thaw_duration_minutes INTEGER DEFAULT 240,
+  temperature_verified_at TIMESTAMP,
+  temperature_verified_c DECIMAL(5, 2),
+  mixed_at TIMESTAMP,
+  mixed_duration_seconds INTEGER DEFAULT 0,
+  mixing_method VARCHAR(64),
+  current_stencil_session_id VARCHAR(64),
+  depleted_at TIMESTAMP,
+  discarded_at TIMESTAMP,
+  current_work_center_id VARCHAR(64) DEFAULT 'wc-spg-01',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Stencils Master Data
+CREATE TABLE IF NOT EXISTS stencils (
+  id VARCHAR(64) PRIMARY KEY,
+  stencil_id VARCHAR(64) UNIQUE NOT NULL,
+  part_number VARCHAR(64) NOT NULL,
+  revision VARCHAR(16) NOT NULL DEFAULT 'A',
+  stencil_serial_number VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'AVAILABLE',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Stencil Sessions (Genealogy Link: Batch -> Stencil Session -> Paste Jar)
+CREATE TABLE IF NOT EXISTS stencil_sessions (
+  id VARCHAR(64) PRIMARY KEY,
+  stencil_id VARCHAR(64) NOT NULL,
+  work_center_id VARCHAR(64) NOT NULL,
+  batch_id VARCHAR(64),
+  started_at TIMESTAMP NOT NULL,
+  ended_at TIMESTAMP,
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+  life_expires_at TIMESTAMP
+);
+
+-- Stencil Paste Loads
+CREATE TABLE IF NOT EXISTS stencil_paste_loads (
+  id VARCHAR(64) PRIMARY KEY,
+  stencil_session_id VARCHAR(64) NOT NULL,
+  paste_jar_id VARCHAR(64) NOT NULL,
+  loaded_at TIMESTAMP NOT NULL,
+  removed_at TIMESTAMP,
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE'
 );
 
 CREATE TABLE IF NOT EXISTS smt_feeder_slots (

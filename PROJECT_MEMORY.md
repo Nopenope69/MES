@@ -1,6 +1,6 @@
 # Antigravity SMT MES Engine: Executive Project Memory & Status Briefing
 
-**Document Version**: 1.1.0 (Hardened Production Release)  
+**Document Version**: 2.0.0 (Phase 2 Quality Enforcement & Controlled-Material Lifecycles Release)  
 **Date**: September 4, 2026  
 **Repository**: [https://github.com/Nopenope69/MES](https://github.com/Nopenope69/MES) (`main` branch)  
 **Target Sector**: High-Speed Electronics Manufacturing Services (EMS) / Surface Mount Technology (SMT)  
@@ -10,24 +10,42 @@
 
 ## 1. Executive Summary
 
-This project is a **conglomerate-grade, event-driven Manufacturing Execution System (MES)** architected specifically for high-speed SMT assembly lines. Unlike legacy monoliths (which rely on synchronous batch writes and slow ERP polls), this engine is built around an **asynchronous 3-tier event spine** with a **native TCP socket gateway** directly interfacing with high-speed pick-and-place equipment (Fuji NXT III / AIMEX running Fuji Nexim Host Interface V2.8.0).
+This platform is a **conglomerate-grade, event-driven Manufacturing Execution System (MES)** engineered specifically for high-speed SMT assembly lines. Built around an **asynchronous 3-tier event spine** with a **native TCP socket gateway** directly interfacing with high-speed pick-and-place equipment (Fuji NXT III / AIMEX running Fuji Nexim Host Interface V2.8.0), the engine has advanced from operational telemetry into a **hardened, quality-enforcing compliance platform**.
 
-Following rigorous peer code review, the platform has completed **Architectural Hardening**:
-* **Stream Framing Accumulator**: Per-socket buffer with an iterative frame extraction loop handling arbitrary TCP packet segmentation (`[half-frame]`), coalescing (`[frame1 + frame2]`), and trailing fragments.
-* **Atomic Transactions (`withTransaction`)**: Transactional atomicity wrapping canonical event log writes and state projections. Any projection crash rolls back cleanly with zero state corruption.
-* **ADR-003 Domain Decoupling**: Extracted `SmtInterlockService`; equipment adapters have zero direct knowledge of domain database tables or SQL schemas.
-* **Verbatim Binary Preservation**: Raw socket frames are stored as `BLOB` (`Buffer`) in `ingress_events.raw_payload` alongside `decoded_payload TEXT` for authentic forensic replay.
-* **Modular "Core Spine + Vertical Packs" Architecture**: Decoupled domain projections into pluggable projectors (`CoreProjector` for generic ISA-95/OEE and `SmtProjector` for reels/feeders/panels), preparing the platform for vertical pack #2 (Process Manufacturing / Pharma).
-* **32/32 Automated Tests Passing (100% Green)** across framing, atomicity, adapter, and HTTP integration suites.
+### Phase 2 Milestones Accomplished:
+1. **Single Splicing Authorization Gate (`SplicingAuthorizationService`)**:
+   * Unified domain decision authority. Both the manual operator tablet (`/splice-verify`) and the Fuji NXT TCP Gateway (`LOADCOMP`/`CHANGECOMP`) evaluate the exact same business logic.
+   * Closed-loop evaluation: Slot configuration + BOM part number match + Reel existence + Reel usability (quarantine check) + JEDEC MSL floor-life validity.
+   * If any quality gate trips: equipment feeder is inhibited, no splice event is committed, and machine receives `result = 1 (NG)`.
+
+2. **JEDEC J-STD-033D Moisture Sensitive Device (MSL) Floor-Life Engine**:
+   * **Core Rule Enforced**: No cron or background scheduler decrementing counters. Remaining floor-life is computed on-read from immutable, auditable interval logs (`nominal_floor_life - cumulative_ambient_exposure = remaining_floor_life`).
+   * Supports JEDEC classes `MSL_1` through `MSL_6`.
+   * Multi-cycle exposure tracking: entering dry storage cabinets (`DRY-CAB-01`, RH < 5%) pauses exposure accumulation; exiting resumes ambient countdown seamlessly.
+   * Thermal desiccation baking: validates against `msl_bake_profiles` (e.g. 125°C for 24h). Restores nominal floor-life to 100% only if compliant duration is satisfied.
+   * `Clock` abstraction with `SystemClock` and `FakeClock` enabling deterministic multi-day time tests without sleep delays.
+
+3. **Solder Paste & Stencil Lifecycle Management (Stage 01 Screen Printer)**:
+   * Process-parameter driven via `solder_paste_profiles`: thaw duration (240m), minimum processing surface temperature (≥22.0°C), planetary centrifugal shear mixing window (120s – 300s), and stencil rolling life (480m = 8h).
+   * Two-way genealogy: Work Order / Batch $\rightarrow$ Stencil Session $\rightarrow$ Stencil Serial $\rightarrow$ Solder Paste Jar UID & Lot.
+   * `PrinterAuthorizationService`: Screen printer interlock gate preventing printer start if stencil life expires or unqualified paste is staged.
+
+4. **Industrial Web Cockpit**:
+   * `SolderPasteStation.tsx` (`Stage 01: Screen Printer`): jar lifecycle tracking (Refrigerated $\rightarrow$ Thawing $\rightarrow$ Thawed $\rightarrow$ Mixed $\rightarrow$ Authorized $\rightarrow$ On Stencil), thermal probe verification, planetary mixer logging, and rolling stencil life gauge.
+   * `OperatorStation.tsx`: dynamic computed MSL floor-life badges (`MSL_3 (160h) [FLOOR_EXPOSURE]`), dry cabinet transfer actions, bake controls, and `[EXPIRED MSL]` simulation toggle.
+
+5. **Testing & Quality Assurance**:
+   * **56 passed out of 56 tests (100% green across 8 test suites)**.
+   * 100% clean TypeScript build across `@mes/shared`, `@mes/api`, and `@mes/web`.
 
 ---
 
 ## 2. Core Architectural Spine
 
 ```
-[ Fuji NXT III / AIMEX ]
-       │  (TCP Socket / Port 30040: 4-byte BE Length + STX ... Tab-Tokens ... ETX)
-       ▼
+[ Fuji NXT III / AIMEX ]                [ Screen Printer / DEK ]
+       │                                           │
+       ▼ (TCP Socket 30040)                        ▼ (REST / Hardware)
 ┌────────────────────────────────────────────────────────────────────────┐
 │ TIER 1: STREAM BUFFER & INGRESS STORE (ingress_events)                 │
 │ - Per-socket accumulator handling split chunks & coalesced frames      │
@@ -44,143 +62,110 @@ Following rigorous peer code review, the platform has completed **Architectural 
                                    │
                                    ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│ TIER 3: PLUGGABLE CQRS PROJECTORS (Materialized Read Models)           │
+│ TIER 3: PLUGGABLE VERTICAL PROJECTORS                                  │
 │ ┌──────────────────────────────────┐ ┌───────────────────────────────┐ │
-│ │ CoreProjector (Generic MES)      │ │ SmtProjector (SMT Vertical)   │ │
-│ │ - Batches & Work Orders          │ │ - Reel Splicing & Inventory   │ │
-│ │ - Machine States & OEE           │ │ - Cassette Feeder Table       │ │
-│ │ - Downtime Attributions          │ │ - Board Checkouts & CPH       │ │
-│ │ - Material Genealogy             │ │ - Nozzle Drop Error Pareto    │ │
+│ │ CoreProjector (ISA-95 Spine)     │ │ SmtProjector (SMT Pack)       │ │
+│ │ - Batches & Work Orders          │ │ - Reel Splicing & Feeders     │ │
+│ │ - Machine States & Downtime      │ │ - JEDEC MSL Exposure Logs     │ │
+│ │ - Shift Production & OEE Metrics │ │ - Paste Jars & Stencils       │ │
 │ └──────────────────────────────────┘ └───────────────────────────────┘ │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ UNIFIED QUALITY GATES & COMPUTED READ MODELS                           │
+│ - SplicingAuthorizationService: BOM + Reel + MSL Floor-Life            │
+│ - MslService: nominal - cumulative ambient exposure (Computed-on-Read) │
+│ - SolderPasteService: Thaw (4h) + Mix (120s) + Stencil Life (8h)      │
+│ - PrinterAuthorizationService: Stencil validity + Jar Authorization    │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Physical Asset Hierarchy (ISA-95 Standard)
-Every event and telemetry point maps strictly to the enterprise asset path:
-`ORG-DIXON.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-01.WC-NXT-01`
-* **Enterprise**: Dixon Technologies India
-* **Site**: Noida Manufacturing Cluster (Plant 4)
-* **Area**: SMT Cleanroom Bay A
-* **Line**: High-Speed SMT Assembly Line 01
-* **Work Centers (Physical Sequence)**:
-  1. `WC-SPG-01`: Fuji GPX-C Solder Paste Screen Printer
-  2. `WC-NXT-01`: Fuji NXT III M6 Pick-and-Place (4 Modules)
-  3. `WC-RFL-01`: Heller 1913 MK5 10-Zone Reflow Oven
-  4. `WC-AOI-01`: Koh Young 3D AOI Optical Inspector
+---
+
+## 3. Database Schema Master Reference
+
+### Tier 1: Ingress Store
+* `ingress_events`: `id`, `source_type`, `source_ip`, `raw_payload` (**BLOB NOT NULL**), `decoded_payload` (**TEXT**), `frame_length`, `received_at`.
+
+### Tier 2: Canonical Event Log
+* `production_events`: `id`, `event_id`, `event_type`, `work_center_id`, `batch_id`, `event_time`, `received_time`, `payload_json`.
+
+### Tier 3: Quality-Enforcing Domain & Read Models
+* `component_reels`: `id`, `reel_id`, `part_number`, `part_name`, `supplier_name`, `lot_number`, `date_code`, `initial_quantity`, `current_quantity`, `msl_level`, `msl_class` (`MSL_1` to `MSL_6`), `msl_remaining_minutes`, `mbb_opened_at`, `mbb_resealed_at`, `storage_location`, `storage_state`, `floor_clock_state`, `floor_life_nominal_minutes`, `floor_life_expires_at`, `hic_status`, `bake_status`, `bake_started_at`, `last_bake_profile_id`, `last_bake_completed_at`, `status`.
+* `msl_exposure_logs`: `id`, `reel_id`, `state` (`AMBIENT_EXPOSURE`, `DRY_STORAGE`, `BAKING`), `started_at`, `ended_at`, `duration_seconds`, `cabinet_id`, `source_event_id`, `created_at`.
+* `dry_cabinets`: `id`, `code`, `name`, `rh_limit_percent` (5.0%), `temperature_min_c`, `temperature_max_c`, `validation_status`, `last_calibrated_at`.
+* `msl_bake_profiles`: `id`, `standard`, `standard_revision`, `msl_class`, `package_thickness_class`, `temperature_c`, `minimum_duration_minutes`, `carrier_type`, `enabled`.
+* `solder_paste_profiles`: `id`, `manufacturer`, `product_code`, `alloy_type`, `storage_min_c`, `storage_max_c`, `thaw_required_minutes`, `minimum_processing_temperature_c`, `mixing_min_seconds`, `mixing_max_seconds`, `stencil_life_minutes`, `shelf_life_days`, `active`.
+* `solder_paste_jars`: `id`, `jar_id`, `part_number`, `profile_id`, `alloy_type`, `lot_number`, `expiry_date`, `status` (`REFRIGERATED`, `THAWING`, `THAWED`, `MIXED`, `AUTHORIZED`, `ON_STENCIL`, `DEPLETED`, `EXPIRED`, `DISCARDED`), `removed_from_cold_at`, `thaw_verified_at`, `temperature_verified_c`, `mixed_at`, `mixed_duration_seconds`, `current_stencil_session_id`, `current_work_center_id`.
+* `stencils`: `id`, `stencil_id`, `part_number`, `revision`, `stencil_serial_number`, `status`.
+* `stencil_sessions`: `id`, `stencil_id`, `work_center_id`, `batch_id`, `started_at`, `ended_at`, `status`, `life_expires_at`.
+* `stencil_paste_loads`: `id`, `stencil_session_id`, `paste_jar_id`, `loaded_at`, `removed_at`, `status`.
+* `smt_feeder_slots`: `id`, `work_center_id`, `module_no`, `stage_no`, `slot_no`, `feeder_id`, `feeder_type`, `assigned_part_number`, `current_reel_id`, `status`.
 
 ---
 
-## 3. What is Built, Audited & Verified Today
+## 4. Quality Gate Evaluation Architecture
 
-### A. Fuji Nexim Host Protocol TCP Gateway (`@mes/api`)
-* **Socket Port**: `30040` (Node.js `net.Server`).
-* **Frame Accumulator**: `FujiNeximAdapter.extractFrames(buffer)` iteratively extracts complete frames, preserving partial fragments in the per-socket buffer across `data` events.
-* **Handshake & Events Supported**:
-  * `SETEV` / `STARTEV`: Bidirectional event registration and notification start.
-  * `MCSTATECHANGE`: Real-time machine state transitions (e.g. `Run`, `Stop`, `Wait Parts`).
-  * `PRODSTARTED` & `PRODCOMPLETEII`: Panel checkout with cycle times down to milliseconds.
-  * `CHANGECOMPII` & `LOADCOMP`: Operator reel splicing and cassette loading.
-  * `PDERROR`: Feeder pick errors (nozzle misfire, empty pickup, fiducial vision failure).
-* **Decoupled Poka-Yoke Interlock**: Evaluated via `SmtInterlockService.verifyFeederSplice()`. If an operator splices a reel with an incorrect part number, gateway returns `ACK` with `Result = 1` (NG), which halts the feeder motor before component mounting.
-
-### B. Industrial Operator Station (`01 // FEEDER BAY`)
-* **In-Line Conveyor Flow Ribbon**: Shows the 4 SMT stations in true physical order.
-* **5-Slot Feeder Cassette Bank**:
-  * Slot 01: `C0402-100NF-16V` (10,000 PCS, Murata Cap, W08f tape)
-  * Slot 02: `R0402-10K-1%` (3,210 PCS, Vishay Resistor, Amber low stock warning)
-  * Slot 03: `IC-STM32F401-LQFP64` (1,358 PCS, ST MCU, MSL 3 floor life timer)
-  * Slot 04: `MOD-QUECTEL-EC200U` (358 PCS, Quectel 4G LTE IoT Module)
-  * Slot 05: `IC-TPS62130-QFN16` (2,716 PCS, TI Buck Converter)
-* **Optical Splicing Dock**:
-  * Laser crosshairs scan reel barcode UID.
-  * Test Mismatch Scenario: Trips relay to scarlet (`🔴 INTERLOCK TRIPPED // FEEDER INHIBITED`).
-  * Test Match Scenario: Engages relay to emerald (`🟢 RELAY ENGAGED // OK TO SPLICE`) and resets stock to 10,000 PCS.
-* **Tactile Stoppage Matrix**:
-  * Modal with SMT downtime categories (`FEEDER TAPE JAM`, `NOZZLE VACUUM TRIP`, `VISION ALIGNMENT`, `STENCIL CLEANING`).
-  * Changes line to `STOPPED_UNPLANNED`, updates OEE, and presents `[RESUME RUN]` button.
-
-### C. Supervisor Telemetry Dashboard (`02 // CPH & LINE OEE`)
-* **Speedometer Gauge**: Live **44,820 CPH** vs 45,000 target.
-* **Board Cycle Time**: Live **18.24s** takt duration.
-* **Feeder Error Pareto (`PDERROR`)**: Ranked nozzle drop and vision failure counts.
-* **1-Click WhatsApp Handover Briefing**: Auto-formats a shift briefing with metrics and active alerts ready to paste into line WhatsApp groups.
-
-### D. Component Traceability & Recall (`03 // GENEALOGY`)
-* **Backward Trace**: Enter board barcode (e.g. `PNL-SM-00142`) $\rightarrow$ instantly view Fuji recipe revision and all mounted component reels, vendor lots, and date codes.
-* **Forward Recall**: Enter vendor lot (e.g. `LOT-MUR-202608`) $\rightarrow$ immediately surface every single PCB board and production batch assembled with that lot.
-
-### E. Wire-Level Frame Inspection (`04 // RAW TCP`)
-* **Tier 1 View**: Wire-level frames captured directly on TCP port `30040` (BLOB + decoded ASCII).
-* **Tier 2 View**: Strongly-typed canonical event envelopes with JSON payload inspection.
-* **3-Second Auto-Poll**: Ingested frames stream live into the browser without manual refresh.
-
-### F. Factory Floor Simulator
-* `npm run simulate:fuji` connects to port `30040`, executes protocol handshake, streams board checkouts, triggers pick errors, and splices reels.
-
----
-
-## 4. Quality & Build Verification
-
-* **Unit & Integration Test Suite**: **32 passed out of 32 tests (100% green)** across:
-  * `tcp-framing.test.ts` (5 tests: split chunks, coalesced frames, trailing fragments, delayed network sockets)
-  * `transaction-atomicity.test.ts` (3 tests: commit, rollback, and event ingestion atomic rollback)
-  * `http-endpoints.test.ts` (12 tests exercising all REST endpoints)
-  * `event-ingestion.test.ts` (5 tests verifying projections and state machine)
-  * `fuji-adapter.test.ts` (7 tests verifying binary framing, tokens, and interlocks)
-* **Frontend Anti-Slop Audit**: Scanned with `uislop` scanner (`devibe_scan.py`):
-  * **Vibe Score: 0 (Clean, zero AI tells)**. No purple gradients, no fuzzy glowing borders, no emoji icons in briefing headers.
-* **Compilation**: Clean TypeScript build across `@mes/shared`, `@mes/api`, and `@mes/web`.
-
----
-
-## 5. Quickstart Guide (Run & Verify in 60 Seconds)
-
-### Prerequisites
-* Node.js v20+ / Mac or Linux
-* Project Directory: `~/Documents/antigravity/quirky-pythagoras`
-
-### Running the System
-```bash
-# 1. Reset and populate Dixon SMT Line 01 seed data
-npm run seed
-
-# 2. Launch Backend API (port 4000) and Fuji TCP Gateway (port 30040)
-npm run dev:api
-
-# 3. In a second terminal, launch Industrial Web Cockpit (port 3000)
-npm run dev:web
+### 1. Splicing Authorization Gate (`SplicingAuthorizationService`)
+```
+Input: { workCenterId, slotNo, scannedPartNumber, scannedReelId }
+  │
+  ├─► Check 1: Slot Configuration (smt_feeder_slots)
+  │    └─► Fail: BLOCKED_SLOT_NOT_CONFIGURED
+  │
+  ├─► Check 2: BOM Part Match (expectedPart == scannedPartNumber)
+  │    └─► Fail: BLOCKED_BOM_MISMATCH
+  │
+  ├─► Check 3: Reel Usability (status != QUARANTINED, != DEPLETED)
+  │    └─► Fail: BLOCKED_REEL_NOT_USABLE
+  │
+  └─► Check 4: JEDEC MSL Floor-Life (MslService.getReelMslStatus)
+       └─► Fail (remainingFloorLife <= 0 or status == EXPIRED_MSL): BLOCKED_MSL_EXPIRED
+       └─► Pass: APPROVED
 ```
 
-### URLs
-* **Web UI**: [http://localhost:3000](http://localhost:3000)
-* **REST API**: [http://localhost:4000](http://localhost:4000)
-* **Fuji TCP Socket**: `127.0.0.1:30040`
-
-### Streaming Live Factory Socket Frames
-```bash
-npm run simulate:fuji
+### 2. Screen Printer Quality Gate (`PrinterAuthorizationService`)
 ```
-
-### Running Automated Tests
-```bash
-npm --workspace=@mes/api test
+Input: { workCenterId, stencilId, pasteJarId }
+  │
+  ├─► Check 1: Stencil Validated & Clean (status != SCRAPPED, != CLEANING_REQUIRED)
+  │    └─► Fail: BLOCKED_STENCIL_CLEANING_REQUIRED
+  │
+  ├─► Check 2: Active Stencil Session (stencil_sessions)
+  │    └─► Fail: BLOCKED_NO_PASTE
+  │
+  ├─► Check 3: Rolling Stencil Life (SolderPasteService.checkStencilLife)
+  │    └─► Fail (elapsed > stencil_life_minutes): BLOCKED_STENCIL_EXPIRED
+  │
+  └─► Check 4: Qualified Paste Jar (status == AUTHORIZED or ON_STENCIL)
+       └─► Fail: BLOCKED_PASTE_NOT_AUTHORIZED
+       └─► Pass: APPROVED
 ```
 
 ---
 
-## 6. SMT MES 0–100 Roadmap & Next Sprint Decision
+## 5. Verification & Test Suite Summary
 
-With architectural hardening complete, the platform is ready for the functional verticals:
+Total Test Suites: **8 files**  
+Total Automated Tests: **56 passed / 0 failed (100% Green)**  
 
-```
-[Phase 1: HARDENED] ──► [Phase 2: MSL & Solder Paste] ──► [Phase 3: 3D AOI Closed-Loop]
-                                                              │
-[Phase 5: ERP Sync] ◄─── [Phase 4: PCB Rework Kiosk] ◄────────┘
-```
+| Suite Name | Scope | Tests |
+|---|---|---|
+| `tests/splicing-authorization.test.ts` | Unified quality gate, BOM matching, MSL interlock trips, REST vs TCP equivalence | 6 |
+| `tests/msl-lifecycle.test.ts` | JEDEC J-STD-033D, FakeClock multi-cycle exposure, dry storage pause, bake reset | 9 |
+| `tests/solder-paste.test.ts` | Cold retrieval, thaw verification, planetary mix, stencil sessions, rolling life | 9 |
+| `tests/tcp-framing.test.ts` | TCP streaming frame accumulator, network fragmentation, coalescing, loopback | 5 |
+| `tests/transaction-atomicity.test.ts` | `withTransaction` commit, rollback, and event ingestion rollback on projection fault | 3 |
+| `tests/fuji-adapter.test.ts` | Fuji Nexim framing, SETEV/STARTEV handshake, LOADCOMP, CHANGECOMP, ACK result codes | 7 |
+| `tests/event-ingestion.test.ts` | Ingestion spine, ISA-95 Core and SMT projections, OEE/downtime/batch tracking | 5 |
+| `tests/http-endpoints.test.ts` | E2E REST endpoints: health, OEE metrics, shift summary, feeder map, lot genealogy | 12 |
 
-### Key Decisions for the Next Sprint:
-1. **Phase 2: MSL Floor-Life & Solder Paste Lifecycle (JEDEC J-STD-033D)**
-   * **Scope**: Floor-life clocks for moisture-sensitive ICs (Quectel 4G, STM32 MCU), nitrogen dry cabinet and bake oven resets, solder paste thaw stopwatches (4h) and centrifugal mixing verification at the Screen Printer station.
-   * **Value**: Critical audit compliance for Tier-1 customers; prevents solder joint voids and IC package cracking in reflow.
-2. **Phase 3: Closed-Loop 3D AOI & PCB Rework Kiosk**
-   * **Scope**: Ingest inspection data from Koh Young 3D AOI, trigger automated conveyor quarantine on repeat defects, and provide an interactive PCB component coordinate repair viewer.
+---
+
+## 6. Git Branch & Monorepo Build Status
+
+* **Repository**: `https://github.com/Nopenope69/MES`
+* **Branch**: `main`
+* **Build Check**: `npm run build` exits `code 0` (clean compilation across shared, api, and web).
+* **Test Check**: `npm test` exits `code 0` (56/56 passing).

@@ -10,7 +10,24 @@ import {
   BatchCompletedPayloadSchema,
   PanelCheckoutPayloadSchema,
   ReelSplicedPayloadSchema,
-  PickErrorPayloadSchema
+  PickErrorPayloadSchema,
+  ReelUnsealedPayloadSchema,
+  ReelDryStorageEnteredPayloadSchema,
+  ReelDryStorageExitedPayloadSchema,
+  ReelBakeStartedPayloadSchema,
+  ReelBakeCompletedPayloadSchema,
+  ReelResealedPayloadSchema,
+  QualityGateBlockedPayloadSchema,
+  QualityGatePassedPayloadSchema,
+  PasteRemovedFromColdPayloadSchema,
+  PasteThawVerifiedPayloadSchema,
+  PasteMixedPayloadSchema,
+  PasteAuthorizedPayloadSchema,
+  PasteLoadedOnStencilPayloadSchema,
+  PasteRemovedFromStencilPayloadSchema,
+  PasteDiscardedPayloadSchema,
+  StencilSessionStartedPayloadSchema,
+  StencilSessionEndedPayloadSchema
 } from '@mes/shared';
 import { getDatabase, IDatabase } from '../db/database';
 import { IEventProjector } from './projectors/projector.interface';
@@ -101,6 +118,57 @@ export class EventIngestionService {
         break;
       case 'BATCH_COMPLETED':
         BatchCompletedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'REEL_UNSEALED':
+        ReelUnsealedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'REEL_DRY_STORAGE_ENTERED':
+        ReelDryStorageEnteredPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'REEL_DRY_STORAGE_EXITED':
+        ReelDryStorageExitedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'REEL_BAKE_STARTED':
+        ReelBakeStartedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'REEL_BAKE_COMPLETED':
+        ReelBakeCompletedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'REEL_RESEALED':
+        ReelResealedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'QUALITY_GATE_BLOCKED':
+        QualityGateBlockedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'QUALITY_GATE_PASSED':
+        QualityGatePassedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'PASTE_REMOVED_FROM_COLD':
+        PasteRemovedFromColdPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'PASTE_THAW_VERIFIED':
+        PasteThawVerifiedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'PASTE_MIXED':
+        PasteMixedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'PASTE_AUTHORIZED':
+        PasteAuthorizedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'PASTE_LOADED_ON_STENCIL':
+        PasteLoadedOnStencilPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'PASTE_REMOVED_FROM_STENCIL':
+        PasteRemovedFromStencilPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'PASTE_DISCARDED':
+        PasteDiscardedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'STENCIL_SESSION_STARTED':
+        StencilSessionStartedPayloadSchema.parse(validatedEnvelope.payload);
+        break;
+      case 'STENCIL_SESSION_ENDED':
+        StencilSessionEndedPayloadSchema.parse(validatedEnvelope.payload);
         break;
     }
 

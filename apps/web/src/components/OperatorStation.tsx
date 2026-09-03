@@ -38,6 +38,10 @@ interface FeederSlot {
   date_code?: string;
   reel_remaining_quantity?: number;
   msl_level?: number;
+  msl_class?: string;
+  floor_clock_state?: string;
+  is_msl_expired?: boolean;
+  bake_status?: string;
   msl_remaining_minutes?: number;
   status: string;
 }
@@ -368,13 +372,20 @@ export const OperatorStation: React.FC = () => {
                         </div>
                       </div>
 
-                      {isMslSensitive ? (
-                        <div className="px-2 py-1 rounded bg-[#FFB800]/10 border border-[#FFB800]/30 text-[#FFB800] text-[10px] font-bold">
-                          MSL {slot.msl_level} ({Math.round((slot.msl_remaining_minutes || 0) / 60)}h)
+                      {slot.msl_class && slot.msl_class !== 'MSL_1' ? (
+                        <div className={`px-2 py-1 rounded border text-[10px] font-bold flex flex-col items-end ${
+                          slot.is_msl_expired || (slot.msl_remaining_minutes ?? 999) <= 0
+                            ? 'bg-red-500/15 border-red-500/40 text-red-400'
+                            : slot.floor_clock_state === 'DRY_STORAGE'
+                            ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                            : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                        }`}>
+                          <span>{slot.msl_class} {slot.floor_clock_state === 'DRY_STORAGE' ? '(PAUSED)' : `(${Math.round((slot.msl_remaining_minutes || 0) / 60)}h)`}</span>
+                          <span className="text-[9px] font-normal opacity-80">{slot.floor_clock_state}</span>
                         </div>
                       ) : (
                         <div className="px-2 py-1 rounded bg-white/5 text-[#7A8A9E] text-[10px]">
-                          MSL 1
+                          MSL 1 (UNLIMITED)
                         </div>
                       )}
 
@@ -518,8 +529,71 @@ export const OperatorStation: React.FC = () => {
                   >
                     [MISMATCH MISFIRE]
                   </button>
+                  <span>•</span>
+                  <button
+                    onClick={() => {
+                      if (activeSlot) {
+                        setScannedPartNumber(activeSlot.assigned_part_number);
+                        setScannedReelId('REEL-EXPIRED-TEST-01');
+                      }
+                    }}
+                    className="text-[#FF8800] hover:underline font-bold"
+                  >
+                    [EXPIRED MSL]
+                  </button>
                 </div>
               </div>
+
+              {/* JEDEC MSL Floor-Life Controls for Active Reel */}
+              {activeSlot?.current_reel_id && (
+                <div className="bg-[#0C1118] p-3 rounded-lg border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between text-[10px] text-[#7A8A9E] font-mono uppercase">
+                    <span>JEDEC J-STD-033D LIFECYCLE CONTROLS</span>
+                    <span className="text-white font-bold">{activeSlot.msl_class || 'MSL 1'}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[11px] font-mono">
+                    <button
+                      onClick={async () => {
+                        await fetch('/api/v1/smt/msl/dry-storage/enter', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ reelId: activeSlot.current_reel_id, cabinetId: 'DRY-CAB-01' })
+                        });
+                        await fetchFeeders();
+                      }}
+                      className="px-2 py-1 rounded bg-[#18222F] hover:bg-[#202D3E] text-cyan-300 border border-cyan-500/30"
+                    >
+                      &rarr; DRY CABINET
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await fetch('/api/v1/smt/msl/dry-storage/exit', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ reelId: activeSlot.current_reel_id, cabinetId: 'DRY-CAB-01' })
+                        });
+                        await fetchFeeders();
+                      }}
+                      className="px-2 py-1 rounded bg-[#18222F] hover:bg-[#202D3E] text-amber-300 border border-amber-500/30"
+                    >
+                      EXIT CABINET
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await fetch('/api/v1/smt/msl/bake/start', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ reelId: activeSlot.current_reel_id, ovenId: 'OVEN-01' })
+                        });
+                        await fetchFeeders();
+                      }}
+                      className="px-2 py-1 rounded bg-[#18222F] hover:bg-[#202D3E] text-orange-400 border border-orange-500/30"
+                    >
+                      START 125°C BAKE
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Interlock Result Banner */}

@@ -144,8 +144,27 @@ export async function initDatabase(): Promise<void> {
   await db.execScript(schemaSql);
   try {
     await db.execute('ALTER TABLE ingress_events ADD COLUMN decoded_payload TEXT;');
-  } catch {
-    // Column already exists
+  } catch {}
+
+  const reelCols = [
+    "ALTER TABLE component_reels ADD COLUMN msl_class VARCHAR(8) DEFAULT 'MSL_1';",
+    "ALTER TABLE component_reels ADD COLUMN mbb_opened_at TIMESTAMP;",
+    "ALTER TABLE component_reels ADD COLUMN mbb_resealed_at TIMESTAMP;",
+    "ALTER TABLE component_reels ADD COLUMN storage_location VARCHAR(64) DEFAULT 'FACTORY_FLOOR';",
+    "ALTER TABLE component_reels ADD COLUMN storage_state VARCHAR(32) DEFAULT 'AMBIENT_EXPOSURE';",
+    "ALTER TABLE component_reels ADD COLUMN floor_clock_state VARCHAR(32) DEFAULT 'FLOOR_EXPOSURE';",
+    "ALTER TABLE component_reels ADD COLUMN floor_life_nominal_minutes INTEGER DEFAULT 999999;",
+    "ALTER TABLE component_reels ADD COLUMN floor_life_expires_at TIMESTAMP;",
+    "ALTER TABLE component_reels ADD COLUMN hic_status VARCHAR(32) DEFAULT 'OK';",
+    "ALTER TABLE component_reels ADD COLUMN hic_verified_at TIMESTAMP;",
+    "ALTER TABLE component_reels ADD COLUMN hic_verified_by VARCHAR(64);",
+    "ALTER TABLE component_reels ADD COLUMN bake_status VARCHAR(32) DEFAULT 'NOT_REQUIRED';",
+    "ALTER TABLE component_reels ADD COLUMN bake_started_at TIMESTAMP;",
+    "ALTER TABLE component_reels ADD COLUMN last_bake_profile_id VARCHAR(64);",
+    "ALTER TABLE component_reels ADD COLUMN last_bake_completed_at TIMESTAMP;"
+  ];
+  for (const sql of reelCols) {
+    try { await db.execute(sql); } catch {}
   }
   console.log('[DB] Schema verified and initialized.');
 }

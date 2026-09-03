@@ -7,7 +7,7 @@ import {
   MesEventEnvelope
 } from '@mes/shared';
 import { EventIngestionService } from '../services/event-ingestion.service';
-import { SmtInterlockService } from '../services/smt-interlock.service';
+import { SplicingAuthorizationService } from '../services/splicing-authorization.service';
 import { getDatabase } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -246,11 +246,15 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
   }
 
   /**
-   * Splicing verification interlock (ADR-003 Decoupled).
-   * Delegates domain validation to SmtInterlockService with zero SQL knowledge in the adapter.
+   * Splicing verification interlock (Unified SplicingAuthorizationService Gate).
    */
-  public async verifySplicingInterlock(slotNo: number, partNumber: string, workCenterId: string): Promise<boolean> {
-    const decision = await SmtInterlockService.verifyFeederSplice(workCenterId, slotNo, partNumber);
+  public async verifySplicingInterlock(slotNo: number, partNumber: string, workCenterId: string, reelId?: string): Promise<boolean> {
+    const decision = await SplicingAuthorizationService.authorizeSplicing({
+      workCenterId,
+      slotNo,
+      scannedPartNumber: partNumber,
+      scannedReelId: reelId
+    });
     return decision.allowed;
   }
 
@@ -393,14 +397,21 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
 
     const fields = this.parseCommandTokens(parsed.command, parsed.tokens);
 
-    // Splicing & Part Load Interlock (Decoupled domain call per ADR-003)
+    // Splicing & Part Load Interlock (Unified SplicingAuthorizationService Gate)
     if (parsed.command === 'LOADCOMP' || parsed.command === 'LOADCOMPIV' || parsed.command === 'CHANGECOMP' || parsed.command === 'CHANGECOMPII') {
       const slotNo = parseInt(fields.slotNo || parsed.tokens[8] || parsed.tokens[3] || '1', 10);
       const partNo = fields.partNo || parsed.tokens[9] || parsed.tokens[4] || '';
+      const newReelId = fields.newReelId || parsed.tokens[12] || parsed.tokens[10] || undefined;
 
-      const decision = await SmtInterlockService.verifyFeederSplice(workCenterId, slotNo, partNo);
+      const decision = await SplicingAuthorizationService.authorizeSplicing({
+        workCenterId,
+        slotNo,
+        scannedPartNumber: partNo,
+        scannedReelId: newReelId
+      });
+
       if (!decision.allowed) {
-        console.warn(`[Fuji Gateway] SPLICING INTERLOCK BLOCKED: Slot ${slotNo} expected ${decision.expectedPartNumber}, received ${partNo}. Halting feeder!`);
+        console.warn(`[Fuji Gateway] SPLICING INTERLOCK BLOCKED (${decision.decisionCode}): Slot ${slotNo} - ${decision.reason}. Halting feeder!`);
         socket.write(this.buildAckFrame(parsed.command, parsed.seqId, false)); // Result = 1 (NG)
         return;
       }

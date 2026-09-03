@@ -7,6 +7,14 @@ export async function seedDatabase(): Promise<void> {
 
   console.log('[SEED] Clearing existing records for clean SMT factory state...');
   await db.execScript(`
+    DELETE FROM stencil_paste_loads;
+    DELETE FROM stencil_sessions;
+    DELETE FROM stencils;
+    DELETE FROM solder_paste_jars;
+    DELETE FROM solder_paste_profiles;
+    DELETE FROM msl_exposure_logs;
+    DELETE FROM msl_bake_profiles;
+    DELETE FROM dry_cabinets;
     DELETE FROM feeder_error_logs;
     DELETE FROM panel_checkouts;
     DELETE FROM smt_feeder_slots;
@@ -112,17 +120,76 @@ export async function seedDatabase(): Promise<void> {
       ('bom-05', 'rec-sm-01', 'IC-TPS62130-QFN16', 'TI Synchronous Step-Down DC-DC Converter', 2.0, 'PCS', 1, 5, 0, 'QFN-16', 'U2, U3 (Power Rails)')
   `);
 
+  console.log('[SEED] Inserting JEDEC MSL Bake Profiles & Dry Cabinets...');
+  await db.execute(`
+    INSERT INTO dry_cabinets (id, code, name, rh_limit_percent, temperature_min_c, temperature_max_c, validation_status, last_calibrated_at)
+    VALUES
+      ('cab-01', 'DRY-CAB-01', 'N2 Nitrogen Dry Storage Cabinet 01 (RH < 5%)', 5.0, 20.0, 25.0, 'VALIDATED', ?)
+  `, [now]);
+
+  await db.execute(`
+    INSERT INTO msl_bake_profiles (id, standard, standard_revision, msl_class, package_thickness_class, temperature_c, minimum_duration_minutes, carrier_type, max_bake_temperature_c, enabled)
+    VALUES
+      ('BAKE-JEDEC-125C-24H', 'JEDEC_J_STD_033D', 'D', 'MSL_3', 'THIN_LE_1_4MM', 125, 1440, 'HIGH_TEMP_REEL', 125, 1),
+      ('BAKE-JEDEC-90C-48H', 'JEDEC_J_STD_033D', 'D', 'MSL_3', 'THIN_LE_1_4MM', 90, 2880, 'MEDIUM_TEMP_REEL', 95, 1),
+      ('BAKE-JEDEC-40C-192H', 'JEDEC_J_STD_033D', 'D', 'MSL_3', 'THIN_LE_1_4MM', 40, 11520, 'STANDARD_PLASTIC_REEL', 45, 1)
+  `);
+
+  console.log('[SEED] Inserting Solder Paste Profiles & Stencil Master Data...');
+  await db.execute(`
+    INSERT INTO solder_paste_profiles (
+      id, manufacturer, product_code, alloy_type, storage_min_c, storage_max_c,
+      thaw_required_minutes, minimum_processing_temperature_c, mixing_required,
+      mixing_method, mixing_min_seconds, mixing_max_seconds, stencil_life_minutes,
+      shelf_life_days, standard_or_tds_reference, revision, active
+    ) VALUES (
+      'spp-alpha-om338', 'Alpha Assembly Solutions', 'ALPHA-OM338-PT', 'SAC305 (Sn96.5/Ag3.0/Cu0.5)',
+      2.0, 10.0, 240, 22.0, 1, 'CENTRIFUGAL_PLANETARY', 120, 300, 480,
+      180, 'IPC-J-STD-004B ROL0', '1.2', 1
+    )
+  `);
+
+  await db.execute(`
+    INSERT INTO solder_paste_jars (
+      id, jar_id, part_number, profile_id, alloy_type, lot_number,
+      expiry_date, status, removed_from_cold_at, thaw_verified_at,
+      thaw_duration_minutes, temperature_verified_at, temperature_verified_c,
+      mixed_at, mixed_duration_seconds, mixing_method, current_work_center_id
+    ) VALUES
+      ('jar-01', 'JAR-ALPHA-2601-A', 'ALPHA-OM338-PT', 'spp-alpha-om338', 'SAC305', 'LOT-PASTE-2601', '2026-12-31T00:00:00Z', 'REFRIGERATED', NULL, NULL, 240, NULL, NULL, NULL, 0, NULL, 'wc-spg-01'),
+      ('jar-02', 'JAR-ALPHA-2601-B', 'ALPHA-OM338-PT', 'spp-alpha-om338', 'SAC305', 'LOT-PASTE-2601', '2026-12-31T00:00:00Z', 'AUTHORIZED', ?, ?, 240, ?, 23.4, ?, 120, 'CENTRIFUGAL_PLANETARY', 'wc-spg-01'),
+      ('jar-03', 'JAR-ALPHA-2601-C', 'ALPHA-OM338-PT', 'spp-alpha-om338', 'SAC305', 'LOT-PASTE-2601', '2026-12-31T00:00:00Z', 'ON_STENCIL', ?, ?, 240, ?, 23.2, ?, 120, 'CENTRIFUGAL_PLANETARY', 'wc-spg-01')
+  `, [now, now, now, now, now, now, now, now]);
+
+  await db.execute(`
+    INSERT INTO stencils (id, stencil_id, part_number, revision, stencil_serial_number, status)
+    VALUES
+      ('stc-sm-01', 'STC-SM-4G-TOP', 'PRD-SM-4G-V2', 'A', 'STN-2026-0042', 'IN_USE')
+  `);
+
   console.log('[SEED] Inserting Component Reels in Warehouse & Feeder Bank...');
   await db.execute(`
-    INSERT INTO component_reels (id, reel_id, part_number, part_name, supplier_name, lot_number, date_code, initial_quantity, current_quantity, unit, msl_level, msl_remaining_minutes, status)
+    INSERT INTO component_reels (
+      id, reel_id, part_number, part_name, supplier_name, lot_number,
+      date_code, initial_quantity, current_quantity, unit, msl_level,
+      msl_class, msl_remaining_minutes, mbb_opened_at, storage_location,
+      storage_state, floor_clock_state, floor_life_nominal_minutes, status
+    ) VALUES
+      ('reel-01', 'REEL-MUR-98124', 'C0402-100NF-16V', '100nF 16V 10% 0402 Ceramic Cap', 'Murata Electronics', 'LOT-MUR-2601', '202612', 10000, 7850, 'PCS', 1, 'MSL_1', 999999, NULL, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 999999, 'MOUNTED'),
+      ('reel-02', 'REEL-VSH-44120', 'R0402-10K-1%', '10k Ohm 1% 0402 Thick Film Resistor', 'Vishay Intertechnology', 'LOT-VSH-8812', '202615', 5000, 3210, 'PCS', 1, 'MSL_1', 999999, NULL, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 999999, 'MOUNTED'),
+      ('reel-03', 'REEL-STM-11029', 'IC-STM32F401-LQFP64', 'STM32F401 32-bit ARM Cortex MCU', 'STMicroelectronics', 'LOT-STM-2602', '202618', 1500, 1358, 'PCS', 3, 'MSL_3', 9600, ?, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 10080, 'MOUNTED'),
+      ('reel-04', 'REEL-QCT-77821', 'MOD-QUECTEL-EC200U', 'Quectel EC200U-CN 4G LTE IoT Module', 'Quectel Wireless', 'LOT-QCT-5519', '202610', 500, 358, 'PCS', 3, 'MSL_3', 4320, ?, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 10080, 'MOUNTED'),
+      ('reel-05', 'REEL-TI-66100', 'IC-TPS62130-QFN16', 'TI Synchronous Step-Down DC-DC Converter', 'Texas Instruments', 'LOT-TI-9901', '202620', 3000, 2716, 'PCS', 2, 'MSL_2', 520000, ?, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 525600, 'MOUNTED'),
+      ('reel-06-sp', 'REEL-MUR-98125-SPLICE', 'C0402-100NF-16V', '100nF 16V 10% 0402 Ceramic Cap', 'Murata Electronics', 'LOT-MUR-2603', '202614', 10000, 10000, 'PCS', 1, 'MSL_1', 999999, NULL, 'WAREHOUSE', 'SEALED_MBB', 'SEALED', 999999, 'READY')
+  `, [now, now, now]);
+
+  // Seed active ambient exposure intervals for reels 3 and 4
+  await db.execute(`
+    INSERT INTO msl_exposure_logs (id, reel_id, state, started_at, source_event_id)
     VALUES
-      ('reel-01', 'REEL-MUR-98124', 'C0402-100NF-16V', '100nF 16V 10% 0402 Ceramic Cap', 'Murata Electronics', 'LOT-MUR-2601', '202612', 10000, 7850, 'PCS', 1, 999999, 'MOUNTED'),
-      ('reel-02', 'REEL-VSH-44120', 'R0402-10K-1%', '10k Ohm 1% 0402 Thick Film Resistor', 'Vishay Intertechnology', 'LOT-VSH-8812', '202615', 5000, 3210, 'PCS', 1, 999999, 'MOUNTED'),
-      ('reel-03', 'REEL-STM-11029', 'IC-STM32F401-LQFP64', 'STM32F401 32-bit ARM Cortex MCU', 'STMicroelectronics', 'LOT-STM-2602', '202618', 1500, 1358, 'PCS', 3, 9600, 'MOUNTED'),
-      ('reel-04', 'REEL-QCT-77821', 'MOD-QUECTEL-EC200U', 'Quectel EC200U-CN 4G LTE IoT Module', 'Quectel Wireless', 'LOT-QCT-5519', '202610', 500, 358, 'PCS', 3, 4320, 'MOUNTED'),
-      ('reel-05', 'REEL-TI-66100', 'IC-TPS62130-QFN16', 'TI Synchronous Step-Down DC-DC Converter', 'Texas Instruments', 'LOT-TI-9901', '202620', 3000, 2716, 'PCS', 2, 43200, 'MOUNTED'),
-      ('reel-06-sp', 'REEL-MUR-98125-SPLICE', 'C0402-100NF-16V', '100nF 16V 10% 0402 Ceramic Cap', 'Murata Electronics', 'LOT-MUR-2603', '202614', 10000, 10000, 'PCS', 1, 999999, 'READY')
-  `);
+      ('log-exp-03', 'REEL-STM-11029', 'AMBIENT_EXPOSURE', ?, 'evt-unseal-03'),
+      ('log-exp-04', 'REEL-QCT-77821', 'AMBIENT_EXPOSURE', ?, 'evt-unseal-04')
+  `, [now, now]);
 
   console.log('[SEED] Mapping SMT Feeder Slots on Fuji NXT III (Module 1)...');
   await db.execute(`
