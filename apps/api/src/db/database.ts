@@ -129,7 +129,8 @@ export function getDatabase(): IDatabase {
     console.log('[DB] Connecting to PostgreSQL database...');
     dbInstance = new PostgresDatabase(dbUrl);
   } else {
-    const localDbPath = path.resolve(process.cwd(), 'mes_local.db');
+    const defaultDbPath = path.resolve(__dirname, '../../mes_local.db');
+    const localDbPath = process.env.SQLITE_DB_PATH || defaultDbPath;
     console.log(`[DB] Using built-in Node SQLite database at: ${localDbPath}`);
     dbInstance = new NodeSqliteDatabase(localDbPath);
   }
@@ -139,7 +140,9 @@ export function getDatabase(): IDatabase {
 
 export async function initDatabase(): Promise<void> {
   const db = getDatabase();
-  const schemaPath = path.resolve(__dirname, 'schema.sql');
+  const schemaPath = fs.existsSync(path.resolve(__dirname, 'schema.sql'))
+    ? path.resolve(__dirname, 'schema.sql')
+    : path.resolve(__dirname, '../../src/db/schema.sql');
   const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
   await db.execScript(schemaSql);
   try {

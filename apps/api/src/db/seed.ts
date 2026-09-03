@@ -180,15 +180,18 @@ export async function seedDatabase(): Promise<void> {
       ('reel-03', 'REEL-STM-11029', 'IC-STM32F401-LQFP64', 'STM32F401 32-bit ARM Cortex MCU', 'STMicroelectronics', 'LOT-STM-2602', '202618', 1500, 1358, 'PCS', 3, 'MSL_3', 9600, ?, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 10080, 'MOUNTED'),
       ('reel-04', 'REEL-QCT-77821', 'MOD-QUECTEL-EC200U', 'Quectel EC200U-CN 4G LTE IoT Module', 'Quectel Wireless', 'LOT-QCT-5519', '202610', 500, 358, 'PCS', 3, 'MSL_3', 4320, ?, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 10080, 'MOUNTED'),
       ('reel-05', 'REEL-TI-66100', 'IC-TPS62130-QFN16', 'TI Synchronous Step-Down DC-DC Converter', 'Texas Instruments', 'LOT-TI-9901', '202620', 3000, 2716, 'PCS', 2, 'MSL_2', 520000, ?, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 525600, 'MOUNTED'),
-      ('reel-06-sp', 'REEL-MUR-98125-SPLICE', 'C0402-100NF-16V', '100nF 16V 10% 0402 Ceramic Cap', 'Murata Electronics', 'LOT-MUR-2603', '202614', 10000, 10000, 'PCS', 1, 'MSL_1', 999999, NULL, 'WAREHOUSE', 'SEALED_MBB', 'SEALED', 999999, 'READY')
+      ('reel-06-sp', 'REEL-MUR-98125-SPLICE', 'C0402-100NF-16V', '100nF 16V 10% 0402 Ceramic Cap', 'Murata Electronics', 'LOT-MUR-2603', '202614', 10000, 10000, 'PCS', 1, 'MSL_1', 999999, NULL, 'WAREHOUSE', 'SEALED_MBB', 'SEALED', 999999, 'READY'),
+      ('reel-exp-demo', 'REEL-EXPIRED-TEST-01', 'C0402-100NF-16V', '100nF Cap (MSL Expired Demo)', 'Murata Electronics', 'LOT-EXP-01', '202610', 5000, 5000, 'PCS', 3, 'MSL_3', 0, '2026-08-01T00:00:00Z', 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'BAKE_REQUIRED', 10080, 'EXPIRED_MSL'),
+      ('reel-quar-demo', 'REEL-QUARANTINE-01', 'C0402-100NF-16V', '100nF Cap (Quarantined Demo)', 'Murata Electronics', 'LOT-QUAR-01', '202611', 5000, 5000, 'PCS', 1, 'MSL_1', 999999, NULL, 'FACTORY_FLOOR', 'AMBIENT_EXPOSURE', 'FLOOR_EXPOSURE', 999999, 'QUARANTINED')
   `, [now, now, now]);
 
-  // Seed active ambient exposure intervals for reels 3 and 4
+  // Seed active ambient exposure intervals for reels 3, 4, and demo expired reel
   await db.execute(`
     INSERT INTO msl_exposure_logs (id, reel_id, state, started_at, source_event_id)
     VALUES
       ('log-exp-03', 'REEL-STM-11029', 'AMBIENT_EXPOSURE', ?, 'evt-unseal-03'),
-      ('log-exp-04', 'REEL-QCT-77821', 'AMBIENT_EXPOSURE', ?, 'evt-unseal-04')
+      ('log-exp-04', 'REEL-QCT-77821', 'AMBIENT_EXPOSURE', ?, 'evt-unseal-04'),
+      ('log-exp-demo', 'REEL-EXPIRED-TEST-01', 'AMBIENT_EXPOSURE', '2026-08-01T00:00:00Z', 'evt-seed-exp')
   `, [now, now]);
 
   console.log('[SEED] Mapping SMT Feeder Slots on Fuji NXT III (Module 1)...');

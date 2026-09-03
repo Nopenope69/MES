@@ -1,7 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initDatabase } from './db/database';
+import { initDatabase, getDatabase } from './db/database';
+import { seedDatabase } from './db/seed';
 import { eventsRouter } from './routes/events.router';
 import { workCentersRouter } from './routes/work-centers.router';
 import { batchesRouter } from './routes/batches.router';
@@ -41,6 +42,14 @@ async function bootstrap() {
   try {
     console.log('[API] Bootstrapping Antigravity SMT MES Engine...');
     await initDatabase();
+
+    // Auto-seed if database is unpopulated
+    const db = getDatabase();
+    const countRows = await db.query<{ cnt: number }>('SELECT COUNT(*) as cnt FROM component_reels');
+    if (countRows.length === 0 || countRows[0].cnt === 0) {
+      console.log('[API] Empty database detected, running initial seed...');
+      await seedDatabase();
+    }
 
     // Start Fuji Nexim TCP Socket Gateway (Default Port 30040)
     const fujiPort = parseInt(process.env.FUJI_PORT || '30040', 10);

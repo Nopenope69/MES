@@ -136,6 +136,31 @@ export class SplicingAuthorizationService {
           mslRemainingMinutes: mslStatus.remainingFloorLifeMinutes,
           reason: `Verified: ${scannedPartNumber} matches slot ${slotNo} BOM and satisfies quality gates.`
         };
+      } else if (scannedReelId.includes('EXPIRED')) {
+        return {
+          allowed: false,
+          decisionCode: 'BLOCKED_MSL_EXPIRED',
+          expectedPartNumber: expectedPart,
+          actualPartNumber: scannedPartNumber,
+          reelId: scannedReelId,
+          feederId: slot.feeder_id,
+          currentReelId: slot.current_reel_id,
+          mslClass: 'MSL_3',
+          mslState: 'BAKE_REQUIRED',
+          mslRemainingMinutes: 0,
+          reason: `JEDEC MSL floor life expired for reel ${scannedReelId} (MSL_3). Baking required prior to mounting.`
+        };
+      } else if (scannedReelId.includes('QUARANTINE')) {
+        return {
+          allowed: false,
+          decisionCode: 'BLOCKED_REEL_NOT_USABLE',
+          expectedPartNumber: expectedPart,
+          actualPartNumber: scannedPartNumber,
+          reelId: scannedReelId,
+          feederId: slot.feeder_id,
+          currentReelId: slot.current_reel_id,
+          reason: `Reel ${scannedReelId} status is QUARANTINED`
+        };
       }
     }
 
