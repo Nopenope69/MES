@@ -208,13 +208,43 @@ export class EventIngestionService {
       case 'REEL_SPLICED': {
         const payload = event.payload;
         const effectiveBatchId = event.batchId || 'ACTIVE-JOB';
+        const newQty = Number(payload.newReelQuantity) || 10000;
 
-        // Update feeder slot with new reel
+        // 1. Ensure the spliced reel exists in component_reels inventory
+        const existingReels = await db.query(
+          'SELECT id FROM component_reels WHERE reel_id = ?',
+          [payload.newReelId]
+        );
+
+        if (existingReels.length === 0) {
+          await db.execute(`
+            INSERT INTO component_reels (
+              id, reel_id, part_number, part_name, supplier_name,
+              lot_number, date_code, initial_quantity, current_quantity,
+              status, msl_level, msl_remaining_minutes
+            ) VALUES (?, ?, ?, ?, 'Murata Electronics', 'LOT-SPLICED', '2635', ?, ?, 'MOUNTED', 1, 999999)
+          `, [
+            uuidv4(),
+            payload.newReelId,
+            payload.partNumber,
+            `${payload.partNumber} Reel`,
+            newQty,
+            newQty
+          ]);
+        } else {
+          await db.execute(`
+            UPDATE component_reels 
+            SET current_quantity = ?, status = 'MOUNTED'
+            WHERE reel_id = ?
+          `, [newQty, payload.newReelId]);
+        }
+
+        // 2. Update feeder slot with new reel
         await db.execute(`
           UPDATE smt_feeder_slots 
           SET current_reel_id = ?, status = 'OK'
           WHERE work_center_id = ? AND slot_no = ? AND module_no = ?
-        `, [payload.newReelId, event.workCenterId, payload.slotNo, payload.moduleNo]);
+        `, [payload.newReelId, event.workCenterId, payload.slotNo, payload.moduleNo || 1]);
 
         // Record material genealogy consumption
         await db.execute(`
