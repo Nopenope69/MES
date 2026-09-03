@@ -19,6 +19,21 @@ eventsRouter.post('/', async (req: Request, res: Response) => {
   }
 });
 
+// Query Tier 1 raw ingress frames (unaltered TCP socket frames)
+eventsRouter.get('/ingress', async (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    const { limit = 50 } = req.query;
+    const rows = await db.query(
+      'SELECT * FROM ingress_events ORDER BY received_at DESC NULLS LAST, id DESC LIMIT ?',
+      [Number(limit)]
+    );
+    res.json(rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Query append-only event log (Audit Trail view)
 eventsRouter.get('/', async (req: Request, res: Response) => {
   try {
