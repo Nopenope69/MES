@@ -8,6 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "seed": "tsx src/db/seed.ts",
+    "migrate": "tsx src/db/run-migrations.ts",
     "test": "vitest run --fileParallelism=false"
   },
   "dependencies": {
