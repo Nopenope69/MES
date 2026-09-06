@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ComplianceLedgerService } from '../services/compliance-ledger.service';
 import { EdhrService } from '../services/edhr.service';
 import { TraceabilityInterrogationService } from '../services/traceability-interrogation.service';
+import { apiKeyAuth } from '../security/http-security';
 
 export const complianceRouter = Router();
 
@@ -139,7 +140,7 @@ complianceRouter.get('/dhr/:dhrNumber', async (req: Request, res: Response) => {
  * POST /api/v1/compliance/dhr/:dhrNumber/release
  * Formally signs off and releases a DHR per 21 CFR Part 11 and 21 CFR 820.180.
  */
-complianceRouter.post('/dhr/:dhrNumber/release', async (req: Request, res: Response) => {
+complianceRouter.post('/dhr/:dhrNumber/release', apiKeyAuth, async (req: Request, res: Response) => {
   try {
     const { dhrNumber } = req.params;
     const { qaReviewerId, qaMeaning, releasedQuantity } = req.body;

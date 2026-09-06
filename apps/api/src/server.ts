@@ -14,6 +14,8 @@ import { complianceRouter } from './routes/compliance.router';
 import { sreRouter } from './routes/sre.router';
 import { MetricsService } from './services/metrics.service';
 import { FujiNeximAdapter } from './adapters/fuji-nexim.adapter';
+import { securityHeadersMiddleware, SimpleRateLimiter } from './security/http-security';
+import { SecretsConfigManager } from './config/secrets';
 
 dotenv.config();
 
@@ -21,9 +23,13 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 let fujiAdapter: FujiNeximAdapter | null = null;
 const metrics = MetricsService.getInstance();
+const spliceRateLimiter = new SimpleRateLimiter(60000, 100);
 
+// Enterprise Security Hardening Middleware
+app.use(securityHeadersMiddleware);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+app.use('/api/v1/smt/splice-verify', spliceRateLimiter.middleware());
 
 // HTTP RED Metrics Middleware
 app.use((req, res, next) => {
@@ -81,6 +87,14 @@ app.get('/api-docs', (_req, res) => {
 </html>`);
 });
 
+// Sanitized Security Posture & Secrets Audit Endpoint
+app.get('/api/v1/security/audit', (_req, res) => {
+  res.json({
+    success: true,
+    data: SecretsConfigManager.getSanitizedReport()
+  });
+});
+
 // Health check
 app.get('/health', (_req, res) => {
   res.json({
@@ -94,6 +108,7 @@ app.get('/health', (_req, res) => {
 async function bootstrap() {
   try {
     console.log('[API] Bootstrapping Antigravity SMT MES Engine...');
+    SecretsConfigManager.loadConfig();
     await initDatabase();
 
     // Auto-seed if database is unpopulated

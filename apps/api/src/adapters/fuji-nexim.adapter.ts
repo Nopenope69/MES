@@ -10,6 +10,8 @@ import { EventIngestionService } from '../services/event-ingestion.service';
 import { SplicingAuthorizationService } from '../services/splicing-authorization.service';
 import { getDatabase } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
+import { IpFirewall } from '../security/ip-firewall';
+import { SecretsConfigManager } from '../config/secrets';
 
 import { IEquipmentAdapter, EquipmentAdapterStatus } from './equipment-adapter.interface';
 
@@ -34,6 +36,12 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IEquipmentA
   private activeConnections: number = 0;
   private framesProcessedTotal: number = 0;
   private lastFrameReceivedAt?: string;
+  public static readonly MAX_SOCKET_BUFFER: number = 64 * 1024; // 64KB max buffer guard against memory exhaustion DoS
+  private customAllowedSubnets: string[] | null = null;
+
+  public setAllowedSubnets(subnets: string[] | null): void {
+    this.customAllowedSubnets = subnets;
+  }
 
   /**
    * Streaming TCP Frame Extractor.
@@ -443,12 +451,31 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IEquipmentA
     this.activePort = port;
 
     this.server = net.createServer((socket) => {
+      const clientIp = socket.remoteAddress || '';
+      const allowed = this.customAllowedSubnets || SecretsConfigManager.loadConfig().allowedSubnets;
+
+      // OT Subnet & IP Firewall Interlock
+      if (!IpFirewall.isAllowed(clientIp, allowed)) {
+        console.warn(`[SECURITY ALERT] Blocked unauthorized SMT TCP connection from IP: ${clientIp}`);
+        socket.destroy();
+        return;
+      }
+
       this.activeConnections++;
-      console.log(`[Fuji Gateway] SMT Machine connected from ${socket.remoteAddress}:${socket.remotePort}`);
+      console.log(`[Fuji Gateway] SMT Machine authorized & connected from ${socket.remoteAddress}:${socket.remotePort}`);
 
       let socketBuffer = Buffer.alloc(0);
 
       socket.on('data', async (chunk: Buffer) => {
+        // Guard against buffer overflow / memory exhaustion DoS
+        if (socketBuffer.length + chunk.length >= FujiNeximAdapter.MAX_SOCKET_BUFFER) {
+          console.warn(
+            `[SECURITY ALERT] Socket buffer overflow attempt from ${clientIp} (${socketBuffer.length + chunk.length} bytes >= ${FujiNeximAdapter.MAX_SOCKET_BUFFER}). Terminating connection.`
+          );
+          socket.destroy();
+          return;
+        }
+
         socketBuffer = Buffer.concat([socketBuffer, chunk]);
 
         const { frames, remainder } = FujiNeximAdapter.extractFrames(socketBuffer);
