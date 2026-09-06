@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { initDatabase, getDatabase } from './db/database';
@@ -50,6 +51,34 @@ app.use('/api/v1/sre', sreRouter);
 app.get('/metrics', (_req, res) => {
   res.setHeader('Content-Type', 'text/plain; version=0.0.4');
   res.send(metrics.getPrometheusMetrics());
+});
+
+// OpenAPI 3.1 Specification Endpoint
+app.get('/api/v1/openapi.json', (_req, res) => {
+  const specPath = path.resolve(__dirname, 'docs/openapi.json');
+  res.sendFile(specPath);
+});
+
+// Interactive API Documentation Explorer
+app.get('/api-docs', (_req, res) => {
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Antigravity SMT MES - Interactive API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.ui = SwaggerUIBundle({
+      url: '/api/v1/openapi.json',
+      dom_id: '#swagger-ui',
+      deepLinking: true
+    });
+  </script>
+</body>
+</html>`);
 });
 
 // Health check

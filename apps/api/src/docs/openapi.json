@@ -1,0 +1,290 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Antigravity SMT MES Engine REST API",
+    "version": "0.2.0-smt",
+    "description": "High-throughput, event-driven Manufacturing Execution System for surface-mount technology (SMT) electronics manufacturing with Fuji Nexim machine integration, JEDEC J-STD-033D MSL tracking, 21 CFR Part 11 digital signatures, and ISO 13485 bidirectional traceability.",
+    "contact": {
+      "name": "MES Platform Engineering",
+      "email": "ops@smt-mes.internal"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local Edge Gateway"
+    },
+    {
+      "url": "http://mes.smt-factory.internal/api",
+      "description": "Factory Shop-Floor Edge Cluster"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health Check Probe",
+        "description": "Kubernetes liveness and readiness probe reporting node health and system version.",
+        "responses": {
+          "200": {
+            "description": "System is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus Metrics Exposition",
+        "description": "Scrapes Golden Signals, SMT CPH throughput, feeder errors, and Fuji socket frame metrics.",
+        "responses": {
+          "200": {
+            "description": "Prometheus 2.0 text format metrics",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/smt/feeders": {
+      "get": {
+        "summary": "List SMT Feeder Rack Slots",
+        "description": "Queries feeder slots across machine modules with current loaded reel and status.",
+        "responses": {
+          "200": {
+            "description": "List of feeder slots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/smt/splice-verify": {
+      "post": {
+        "summary": "Verify Component Reel Splice (Quality Gate)",
+        "description": "Validates barcode matching and JEDEC MSL floor life before allowing splice on feeder.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpliceVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Splice verification result with interlock state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpliceVerifyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/dhr/generate": {
+      "post": {
+        "summary": "Generate Electronic Device History Record (eDHR)",
+        "description": "Compiles as-built BoM, controlled materials, inspection counts, and computes SHA-256 checksum per 21 CFR 820.180.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["batchId"],
+                "properties": {
+                  "batchId": { "type": "string" },
+                  "actorId": { "type": "string" },
+                  "actorRole": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "eDHR successfully generated and hashed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DhrResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/dhr/{dhrNumber}/release": {
+      "post": {
+        "summary": "QA Sign-off & Commercial Release of DHR",
+        "description": "Formally applies 21 CFR Part 11 digital signature and transitions DHR to RELEASED status.",
+        "parameters": [
+          {
+            "name": "dhrNumber",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["qaReviewerId"],
+                "properties": {
+                  "qaReviewerId": { "type": "string" },
+                  "qaMeaning": { "type": "string" },
+                  "releasedQuantity": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "DHR released and signed into compliance ledger"
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/traceability/backward/{identifier}": {
+      "get": {
+        "summary": "ISO 13485 Backward Recall Interrogation",
+        "description": "Pinpoints all affected PCBA batches and panel barcodes containing suspect component lot.",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Backward recall containment analysis"
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/traceability/forward/{identifier}": {
+      "get": {
+        "summary": "ISO 13485 Forward Genealogy Interrogation",
+        "description": "Deconstructs PCBA panel or batch into complete as-built materials, paste lot, and tooling.",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Forward as-built genealogy tree"
+          }
+        }
+      }
+    },
+    "/api/v1/sre/slos": {
+      "get": {
+        "summary": "Live SLO & Error Budget Compliance",
+        "description": "Returns multi-window burn rate calculations and compliance state per Google SRE Workbook.",
+        "responses": {
+          "200": {
+            "description": "SLO report with error budgets and burn rates"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "HEALTHY" },
+          "system": { "type": "string", "example": "Antigravity SMT MES Engine" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "version": { "type": "string", "example": "0.2.0-smt" }
+        }
+      },
+      "FeedersResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "feeders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "slotNo": { "type": "integer" },
+                "feederId": { "type": "string" },
+                "assignedPartNumber": { "type": "string" },
+                "currentReelId": { "type": "string" },
+                "status": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "SpliceVerifyRequest": {
+        "type": "object",
+        "required": ["workCenterId", "feederId", "scannedBarcode"],
+        "properties": {
+          "workCenterId": { "type": "string" },
+          "feederId": { "type": "string" },
+          "scannedBarcode": { "type": "string" },
+          "operatorId": { "type": "string" }
+        }
+      },
+      "SpliceVerifyResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "allowed": { "type": "boolean" },
+          "machineInterlockHalt": { "type": "boolean" },
+          "reason": { "type": "string" },
+          "mslStatus": { "type": "string" }
+        }
+      },
+      "DhrResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "dhrNumber": { "type": "string" },
+              "status": { "type": "string" },
+              "sha256Checksum": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
