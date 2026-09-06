@@ -10,6 +10,8 @@ import { reportsRouter } from './routes/reports.router';
 import { genealogyRouter } from './routes/genealogy.router';
 import { smtRouter } from './routes/smt.router';
 import { complianceRouter } from './routes/compliance.router';
+import { sreRouter } from './routes/sre.router';
+import { MetricsService } from './services/metrics.service';
 import { FujiNeximAdapter } from './adapters/fuji-nexim.adapter';
 
 dotenv.config();
@@ -17,9 +19,22 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 let fujiAdapter: FujiNeximAdapter | null = null;
+const metrics = MetricsService.getInstance();
 
 app.use(cors());
 app.use(express.json());
+
+// HTTP RED Metrics Middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const durationSec = (Date.now() - start) / 1000;
+    const route = req.route ? req.baseUrl + req.route.path : req.path;
+    metrics.httpRequestsTotal.inc({ method: req.method, route, status: res.statusCode });
+    metrics.httpRequestDuration.observe({ method: req.method, route }, durationSec);
+  });
+  next();
+});
 
 // Register API routes
 app.use('/api/v1/events', eventsRouter);
@@ -29,6 +44,13 @@ app.use('/api/v1/reports', reportsRouter);
 app.use('/api/v1/genealogy', genealogyRouter);
 app.use('/api/v1/smt', smtRouter);
 app.use('/api/v1/compliance', complianceRouter);
+app.use('/api/v1/sre', sreRouter);
+
+// Prometheus Metrics Endpoint
+app.get('/metrics', (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain; version=0.0.4');
+  res.send(metrics.getPrometheusMetrics());
+});
 
 // Health check
 app.get('/health', (_req, res) => {

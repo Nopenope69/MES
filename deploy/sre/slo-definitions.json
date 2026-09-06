@@ -1,0 +1,52 @@
+{
+  "service": "smt-mes-engine",
+  "version": "0.2.0-smt",
+  "slos": [
+    {
+      "id": "slo-fuji-ingestion-latency",
+      "name": "Fuji Nexim TCP Socket Frame Ingestion Latency",
+      "description": "99.9% of Fuji Nexim placement machine frames ingested, decoded, and projected in under 10ms over 30 days",
+      "sliType": "latency",
+      "target": 99.9,
+      "thresholdMs": 10,
+      "windowDays": 30,
+      "errorBudgetPercent": 0.1,
+      "burnRateAlertThresholds": {
+        "oneHour": 14.4,
+        "sixHours": 6.0
+      }
+    },
+    {
+      "id": "slo-quality-gate-availability",
+      "name": "SMT Interlock & Splice Verification Availability",
+      "description": "99.99% of feeder splicing and material barcode quality gate verification queries succeed without errors",
+      "sliType": "availability",
+      "target": 99.99,
+      "windowDays": 30,
+      "errorBudgetPercent": 0.01,
+      "burnRateAlertThresholds": {
+        "oneHour": 14.4,
+        "sixHours": 6.0
+      }
+    },
+    {
+      "id": "slo-audit-ledger-integrity",
+      "name": "21 CFR Part 11 Compliance Ledger Integrity",
+      "description": "100% of cryptographic audit ledger verification walks succeed with unbroken SHA-256 hash chains",
+      "sliType": "correctness",
+      "target": 100.0,
+      "windowDays": 30,
+      "errorBudgetPercent": 0.0,
+      "burnRateAlertThresholds": {
+        "immediate": 1.0
+      }
+    }
+  ],
+  "errorBudgetPolicy": {
+    "exhaustionActions": [
+      "Freeze non-critical production schema migrations",
+      "Halt automated background replays",
+      "Prioritize telemetry ingest and hardware interlock stability over ad-hoc reporting"
+    ]
+  }
+}
