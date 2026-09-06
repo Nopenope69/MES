@@ -371,6 +371,7 @@ CREATE TABLE IF NOT EXISTS production_events (
   id VARCHAR(64) PRIMARY KEY,
   event_id VARCHAR(64) UNIQUE NOT NULL,
   event_type VARCHAR(64) NOT NULL,
+  schema_version VARCHAR(16) DEFAULT '1.0.0',
   event_time TIMESTAMP NOT NULL,
   received_time TIMESTAMP NOT NULL,
   source_type VARCHAR(32) NOT NULL,
@@ -391,6 +392,27 @@ CREATE TABLE IF NOT EXISTS production_events (
 CREATE INDEX IF NOT EXISTS idx_events_work_center ON production_events(work_center_id, event_time);
 CREATE INDEX IF NOT EXISTS idx_events_batch ON production_events(batch_id, event_time);
 CREATE INDEX IF NOT EXISTS idx_events_type ON production_events(event_type);
+
+-- Track A: Projection Checkpoints (High-Water Mark for Catch-up and Fast Replay)
+CREATE TABLE IF NOT EXISTS projection_checkpoints (
+  projection_name VARCHAR(64) PRIMARY KEY,
+  last_event_id VARCHAR(64),
+  last_event_time TIMESTAMP,
+  events_processed BIGINT DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Track A: Aggregate State Snapshots (O(1) Catch-up without Genesis Replay)
+CREATE TABLE IF NOT EXISTS projection_snapshots (
+  id VARCHAR(64) PRIMARY KEY,
+  aggregate_type VARCHAR(64) NOT NULL, -- e.g. FEEDER_BANK, WORK_CENTER, REEL
+  aggregate_id VARCHAR(64) NOT NULL,
+  snapshot_version BIGINT NOT NULL,
+  state_json TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_aggregate ON projection_snapshots(aggregate_type, aggregate_id, snapshot_version);
 
 -- ============================================================================
 -- TIER 3: Projections (State Slices, Downtime, Lineage)

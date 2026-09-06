@@ -169,5 +169,33 @@ export async function initDatabase(): Promise<void> {
   for (const sql of reelCols) {
     try { await db.execute(sql); } catch {}
   }
+
+  // Track A: Event Sourcing & Projection Schema Migrations
+  try {
+    await db.execute("ALTER TABLE production_events ADD COLUMN schema_version VARCHAR(16) DEFAULT '1.0.0';");
+  } catch {}
+
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS projection_checkpoints (
+        projection_name VARCHAR(64) PRIMARY KEY,
+        last_event_id VARCHAR(64),
+        last_event_time TIMESTAMP,
+        events_processed BIGINT DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS projection_snapshots (
+        id VARCHAR(64) PRIMARY KEY,
+        aggregate_type VARCHAR(64) NOT NULL,
+        aggregate_id VARCHAR(64) NOT NULL,
+        snapshot_version BIGINT NOT NULL,
+        state_json TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } catch {}
+
   console.log('[DB] Schema verified and initialized.');
 }

@@ -11,6 +11,8 @@ import { SplicingAuthorizationService } from '../services/splicing-authorization
 import { getDatabase } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 
+import { IEquipmentAdapter, EquipmentAdapterStatus } from './equipment-adapter.interface';
+
 /**
  * Production Fuji Nexim TCP Socket Gateway.
  * Implements the Fuji Host Interface Specification V2.8.0.
@@ -18,12 +20,20 @@ import { v4 as uuidv4 } from 'uuid';
  * Includes stream frame accumulator for fragmented/coalesced TCP packets.
  * Includes closed-loop Splicing Verification Interlock (ADR-003 decoupled).
  */
-export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
+export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IEquipmentAdapter {
+  readonly id = 'fuji-nxt-01';
+  readonly name = 'Fuji NXT III Placement Gateway';
+  readonly protocolName = 'Fuji Nexim Host Interface V2.8.0';
+  readonly workCenterId = 'wc-nxt-01';
   readonly adapterId = 'FujiNeximAdapter';
   readonly adapterName = 'FujiNeximAdapter';
   readonly sourceType = 'INTEGRATION_SOCKET';
   private server: net.Server | null = null;
   private isRunning = false;
+  private activePort: number = 30040;
+  private activeConnections: number = 0;
+  private framesProcessedTotal: number = 0;
+  private lastFrameReceivedAt?: string;
 
   /**
    * Streaming TCP Frame Extractor.
@@ -430,8 +440,10 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
 
   public startListener(port = 30040, workCenterId = 'wc-nxt-01'): void {
     if (this.isRunning) return;
+    this.activePort = port;
 
     this.server = net.createServer((socket) => {
+      this.activeConnections++;
       console.log(`[Fuji Gateway] SMT Machine connected from ${socket.remoteAddress}:${socket.remotePort}`);
 
       let socketBuffer = Buffer.alloc(0);
@@ -443,11 +455,14 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
         socketBuffer = Buffer.from(remainder);
 
         for (const frame of frames) {
+          this.framesProcessedTotal++;
+          this.lastFrameReceivedAt = new Date().toISOString();
           await this.processSingleFrame(socket, frame, workCenterId);
         }
       });
 
       socket.on('close', () => {
+        this.activeConnections = Math.max(0, this.activeConnections - 1);
         socketBuffer = Buffer.alloc(0);
         console.log('[Fuji Gateway] SMT Machine disconnected.');
       });
@@ -467,6 +482,25 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter {
     if (this.server) {
       this.server.close();
       this.isRunning = false;
+      this.activeConnections = 0;
     }
+  }
+
+  public stopListener(): void {
+    this.stop();
+  }
+
+  public getStatus(): EquipmentAdapterStatus {
+    return {
+      id: this.id,
+      name: this.name,
+      protocolName: this.protocolName,
+      workCenterId: this.workCenterId,
+      isRunning: this.isRunning,
+      port: this.activePort,
+      activeConnections: this.activeConnections,
+      lastFrameReceivedAt: this.lastFrameReceivedAt,
+      framesProcessedTotal: this.framesProcessedTotal
+    };
   }
 }

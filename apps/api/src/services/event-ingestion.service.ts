@@ -33,6 +33,7 @@ import { getDatabase, IDatabase } from '../db/database';
 import { IEventProjector } from './projectors/projector.interface';
 import { CoreProjector } from './projectors/core.projector';
 import { SmtProjector } from './projectors/smt.projector';
+import { EventUpcasterService } from './event-upcaster.service';
 
 export class EventIngestionService {
   private static projectors: IEventProjector[] = [
@@ -84,91 +85,108 @@ export class EventIngestionService {
       operatorId: rawEnvelope.operatorId,
       sequenceId: rawEnvelope.sequenceId,
       correlationId: rawEnvelope.correlationId,
+      schemaVersion: rawEnvelope.schemaVersion || '1.0.0',
       payload: rawEnvelope.payload || {}
     };
 
     // 1. Validate envelope structure
     const validatedEnvelope = MesEventEnvelopeSchema.parse(envelope);
 
+    // Track A: Idempotency Gate (Skip duplicate event ingestion without re-projecting)
+    const existing = await db.query<{ id: string }>(
+      'SELECT id FROM production_events WHERE event_id = ?',
+      [validatedEnvelope.eventId]
+    );
+    if (existing.length > 0) {
+      return {
+        success: true,
+        eventId: validatedEnvelope.eventId,
+        message: `Event [${validatedEnvelope.eventId}] already processed (idempotent duplicate skipped).`
+      };
+    }
+
+    // Track A: Event Upcaster (Transforms legacy event schemas to current version)
+    const upcastedEnvelope = EventUpcasterService.upcast(validatedEnvelope);
+
     // 2. Validate payload based on event type
-    switch (validatedEnvelope.eventType) {
+    switch (upcastedEnvelope.eventType) {
       case 'BATCH_STARTED':
-        BatchStartedPayloadSchema.parse(validatedEnvelope.payload);
+        BatchStartedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'STATE_CHANGED':
-        StateChangedPayloadSchema.parse(validatedEnvelope.payload);
+        StateChangedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'DOWNTIME_RECORDED':
-        DowntimeRecordedPayloadSchema.parse(validatedEnvelope.payload);
+        DowntimeRecordedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'MATERIAL_CONSUMED':
-        MaterialConsumedPayloadSchema.parse(validatedEnvelope.payload);
+        MaterialConsumedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'REEL_SPLICED':
-        ReelSplicedPayloadSchema.parse(validatedEnvelope.payload);
+        ReelSplicedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PANEL_CHECKOUT':
-        PanelCheckoutPayloadSchema.parse(validatedEnvelope.payload);
+        PanelCheckoutPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PICK_ERROR_RECORDED':
-        PickErrorPayloadSchema.parse(validatedEnvelope.payload);
+        PickErrorPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'OUTPUT_RECORDED':
-        OutputRecordedPayloadSchema.parse(validatedEnvelope.payload);
+        OutputRecordedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'BATCH_COMPLETED':
-        BatchCompletedPayloadSchema.parse(validatedEnvelope.payload);
+        BatchCompletedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'REEL_UNSEALED':
-        ReelUnsealedPayloadSchema.parse(validatedEnvelope.payload);
+        ReelUnsealedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'REEL_DRY_STORAGE_ENTERED':
-        ReelDryStorageEnteredPayloadSchema.parse(validatedEnvelope.payload);
+        ReelDryStorageEnteredPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'REEL_DRY_STORAGE_EXITED':
-        ReelDryStorageExitedPayloadSchema.parse(validatedEnvelope.payload);
+        ReelDryStorageExitedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'REEL_BAKE_STARTED':
-        ReelBakeStartedPayloadSchema.parse(validatedEnvelope.payload);
+        ReelBakeStartedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'REEL_BAKE_COMPLETED':
-        ReelBakeCompletedPayloadSchema.parse(validatedEnvelope.payload);
+        ReelBakeCompletedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'REEL_RESEALED':
-        ReelResealedPayloadSchema.parse(validatedEnvelope.payload);
+        ReelResealedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'QUALITY_GATE_BLOCKED':
-        QualityGateBlockedPayloadSchema.parse(validatedEnvelope.payload);
+        QualityGateBlockedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'QUALITY_GATE_PASSED':
-        QualityGatePassedPayloadSchema.parse(validatedEnvelope.payload);
+        QualityGatePassedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PASTE_REMOVED_FROM_COLD':
-        PasteRemovedFromColdPayloadSchema.parse(validatedEnvelope.payload);
+        PasteRemovedFromColdPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PASTE_THAW_VERIFIED':
-        PasteThawVerifiedPayloadSchema.parse(validatedEnvelope.payload);
+        PasteThawVerifiedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PASTE_MIXED':
-        PasteMixedPayloadSchema.parse(validatedEnvelope.payload);
+        PasteMixedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PASTE_AUTHORIZED':
-        PasteAuthorizedPayloadSchema.parse(validatedEnvelope.payload);
+        PasteAuthorizedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PASTE_LOADED_ON_STENCIL':
-        PasteLoadedOnStencilPayloadSchema.parse(validatedEnvelope.payload);
+        PasteLoadedOnStencilPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PASTE_REMOVED_FROM_STENCIL':
-        PasteRemovedFromStencilPayloadSchema.parse(validatedEnvelope.payload);
+        PasteRemovedFromStencilPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'PASTE_DISCARDED':
-        PasteDiscardedPayloadSchema.parse(validatedEnvelope.payload);
+        PasteDiscardedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'STENCIL_SESSION_STARTED':
-        StencilSessionStartedPayloadSchema.parse(validatedEnvelope.payload);
+        StencilSessionStartedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
       case 'STENCIL_SESSION_ENDED':
-        StencilSessionEndedPayloadSchema.parse(validatedEnvelope.payload);
+        StencilSessionEndedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
     }
 
@@ -177,42 +195,54 @@ export class EventIngestionService {
       // Append to immutable Event Log
       await tx.execute(`
         INSERT INTO production_events (
-          id, event_id, event_type, event_time, received_time, source_type,
+          id, event_id, event_type, schema_version, event_time, received_time, source_type,
           source_id, sequence_id, site_id, work_center_id, asset_path, ingress_event_id, batch_id,
           work_order_id, operator_id, correlation_id, payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         uuidv4(),
-        validatedEnvelope.eventId,
-        validatedEnvelope.eventType,
-        validatedEnvelope.eventTime,
-        validatedEnvelope.receivedTime,
-        validatedEnvelope.sourceType,
-        validatedEnvelope.sourceId,
-        validatedEnvelope.sequenceId ?? null,
-        validatedEnvelope.siteId,
-        validatedEnvelope.workCenterId,
-        validatedEnvelope.assetPath ?? null,
-        validatedEnvelope.ingressEventId ?? null,
-        validatedEnvelope.batchId ?? null,
-        validatedEnvelope.workOrderId ?? null,
-        validatedEnvelope.operatorId ?? null,
-        validatedEnvelope.correlationId ?? null,
-        JSON.stringify(validatedEnvelope.payload)
+        upcastedEnvelope.eventId,
+        upcastedEnvelope.eventType,
+        upcastedEnvelope.schemaVersion || '1.0.0',
+        upcastedEnvelope.eventTime,
+        upcastedEnvelope.receivedTime,
+        upcastedEnvelope.sourceType,
+        upcastedEnvelope.sourceId,
+        upcastedEnvelope.sequenceId ?? null,
+        upcastedEnvelope.siteId,
+        upcastedEnvelope.workCenterId,
+        upcastedEnvelope.assetPath ?? null,
+        upcastedEnvelope.ingressEventId ?? null,
+        upcastedEnvelope.batchId ?? null,
+        upcastedEnvelope.workOrderId ?? null,
+        upcastedEnvelope.operatorId ?? null,
+        upcastedEnvelope.correlationId ?? null,
+        JSON.stringify(upcastedEnvelope.payload)
       ]);
 
       // Project state changes to query read models across registered projectors
       for (const projector of EventIngestionService.projectors) {
-        if (projector.supports(validatedEnvelope.eventType)) {
-          await projector.project(validatedEnvelope, tx);
+        if (projector.supports(upcastedEnvelope.eventType)) {
+          await projector.project(upcastedEnvelope, tx);
+
+          // Track A: Update High-Water Mark Projection Checkpoint
+          await tx.execute(`
+            INSERT INTO projection_checkpoints (projection_name, last_event_id, last_event_time, events_processed, updated_at)
+            VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT(projection_name) DO UPDATE SET
+              last_event_id = excluded.last_event_id,
+              last_event_time = excluded.last_event_time,
+              events_processed = projection_checkpoints.events_processed + 1,
+              updated_at = CURRENT_TIMESTAMP
+          `, [projector.constructor.name, upcastedEnvelope.eventId, upcastedEnvelope.eventTime]);
         }
       }
     });
 
     return {
       success: true,
-      eventId: validatedEnvelope.eventId,
-      message: `Event [${validatedEnvelope.eventType}] successfully ingested and projected atomically.`
+      eventId: upcastedEnvelope.eventId,
+      message: `Event [${upcastedEnvelope.eventType}] successfully ingested and projected atomically.`
     };
   }
 }

@@ -353,3 +353,37 @@ smtRouter.post('/printer/authorize-start', async (req: Request, res: Response) =
   }
 });
 
+// Track A: Hardware Abstraction Layer (HAL) Equipment Gateway Status
+smtRouter.get('/equipment/status', (_req: Request, res: Response) => {
+  try {
+    const { EquipmentGatewayManager } = require('../adapters/equipment-gateway.manager');
+    const statuses = EquipmentGatewayManager.getInstance().getAllStatuses();
+    res.json(statuses);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Track A: Projection Checkpoints & Catch-up Replay
+smtRouter.get('/projections/checkpoints', async (_req: Request, res: Response) => {
+  try {
+    const { ProjectionReplayService } = require('../services/projection-replay.service');
+    const checkpoints = await ProjectionReplayService.getCheckpoints();
+    res.json(checkpoints);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+smtRouter.post('/projections/replay', async (req: Request, res: Response) => {
+  try {
+    const { fromTimestamp } = req.body;
+    const { ProjectionReplayService } = require('../services/projection-replay.service');
+    const result = await ProjectionReplayService.replayCatchup({ fromTimestamp });
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+

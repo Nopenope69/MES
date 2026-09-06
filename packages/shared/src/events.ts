@@ -320,6 +320,7 @@ export const MesEventEnvelopeSchema = z.object({
   batchId: z.string().optional(),
   operatorId: z.string().optional(),
   correlationId: z.string().optional(),
+  schemaVersion: z.string().optional(),
   payload: z.record(z.any())
 });
 
