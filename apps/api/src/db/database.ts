@@ -197,5 +197,42 @@ export async function initDatabase(): Promise<void> {
     `);
   } catch {}
 
+  // Track B: Compliance & Industrial Audit Readiness Migrations
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS compliance_audit_ledger (
+        id VARCHAR(64) PRIMARY KEY,
+        sequence_number BIGINT UNIQUE NOT NULL,
+        previous_hash VARCHAR(64) NOT NULL,
+        current_hash VARCHAR(64) NOT NULL,
+        actor_id VARCHAR(64) NOT NULL,
+        actor_role VARCHAR(64) NOT NULL,
+        action_type VARCHAR(64) NOT NULL,
+        meaning VARCHAR(256) NOT NULL,
+        entity_type VARCHAR(64) NOT NULL,
+        entity_id VARCHAR(64) NOT NULL,
+        metadata_json TEXT NOT NULL,
+        signed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS device_history_records (
+        id VARCHAR(64) PRIMARY KEY,
+        dhr_number VARCHAR(64) UNIQUE NOT NULL,
+        batch_id VARCHAR(64) NOT NULL,
+        product_code VARCHAR(64) NOT NULL,
+        work_order_number VARCHAR(64) NOT NULL,
+        manufactured_quantity DECIMAL(12, 3) NOT NULL,
+        released_quantity DECIMAL(12, 3) NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+        qa_reviewer_id VARCHAR(64),
+        qa_released_at TIMESTAMP,
+        dhr_payload_json TEXT NOT NULL,
+        sha256_checksum VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } catch {}
+
   console.log('[DB] Schema verified and initialized.');
 }

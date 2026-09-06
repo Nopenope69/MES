@@ -9,6 +9,7 @@ import { batchesRouter } from './routes/batches.router';
 import { reportsRouter } from './routes/reports.router';
 import { genealogyRouter } from './routes/genealogy.router';
 import { smtRouter } from './routes/smt.router';
+import { complianceRouter } from './routes/compliance.router';
 import { FujiNeximAdapter } from './adapters/fuji-nexim.adapter';
 
 dotenv.config();
@@ -27,6 +28,7 @@ app.use('/api/v1/batches', batchesRouter);
 app.use('/api/v1/reports', reportsRouter);
 app.use('/api/v1/genealogy', genealogyRouter);
 app.use('/api/v1/smt', smtRouter);
+app.use('/api/v1/compliance', complianceRouter);
 
 // Health check
 app.get('/health', (_req, res) => {
