@@ -1,0 +1,17 @@
+node_modules
+.git
+.github
+.agent
+.gemini
+dist
+build
+coverage
+*.log
+*.sqlite
+*.db
+.env
+.env.local
+.DS_Store
+deploy/helm
+deploy/k8s
+tests

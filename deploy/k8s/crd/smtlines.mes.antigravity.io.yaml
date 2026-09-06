@@ -1,0 +1,96 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: smtlines.mes.antigravity.io
+spec:
+  group: mes.antigravity.io
+  names:
+    kind: SmtLine
+    listKind: SmtLineList
+    plural: smtlines
+    singular: smtline
+    shortNames:
+      - smt
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - lineCode
+                - plantId
+                - modules
+              properties:
+                lineCode:
+                  type: string
+                  description: "Unique factory identifier for SMT line (e.g. LINE-01)"
+                plantId:
+                  type: string
+                  description: "Plant location code (e.g. PLANT-NOIDA-01)"
+                placementMachineType:
+                  type: string
+                  default: "Fuji NXT III"
+                ratedCph:
+                  type: integer
+                  description: "Theoretical components per hour speed rating"
+                  default: 35000
+                fujiHostPort:
+                  type: integer
+                  default: 30040
+                machineIpAddress:
+                  type: string
+                  description: "Static IP of Fuji Nexim machine controller on OT subnet"
+                modules:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - moduleNumber
+                      - slots
+                    properties:
+                      moduleNumber:
+                        type: integer
+                      headType:
+                        type: string
+                        default: "H12S"
+                      slots:
+                        type: integer
+                        default: 20
+                qualityGates:
+                  type: object
+                  properties:
+                    enforceMslCheck:
+                      type: boolean
+                      default: true
+                    enforceSolderPasteCheck:
+                      type: boolean
+                      default: true
+                    enforceBarcodeScanMatch:
+                      type: boolean
+                      default: true
+            status:
+              type: object
+              properties:
+                state:
+                  type: string
+                  enum: ["INITIALIZING", "RUNNING", "IDLE", "INTERLOCKED", "ERROR"]
+                activeJobId:
+                  type: string
+                currentCph:
+                  type: integer
+                lastTelemetryTimestamp:
+                  type: string
+                interlockActive:
+                  type: boolean
+                activeAlarms:
+                  type: array
+                  items:
+                    type: string
+      subresources:
+        status: {}

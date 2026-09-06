@@ -1,0 +1,16 @@
+apiVersion: v2
+name: smt-mes
+description: Industrial Manufacturing Execution System (MES) for SMT Vertical & Fuji Placement Machine Integration
+type: application
+version: 0.2.0
+appVersion: "0.2.0-smt"
+keywords:
+  - mes
+  - smt
+  - manufacturing
+  - electronics
+  - fuji-nexim
+  - industrial-edge
+maintainers:
+  - name: MES Platform Team
+    email: ops@smt-mes.internal

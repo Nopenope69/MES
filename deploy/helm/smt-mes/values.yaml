@@ -1,0 +1,82 @@
+global:
+  environment: production
+  factorySite: "dixon-noida-plant-01"
+
+# MES Backend Engine & Fuji TCP Gateway
+api:
+  replicaCount: 2
+  image:
+    repository: smt-mes-api
+    pullPolicy: IfNotPresent
+    tag: "0.2.0"
+  service:
+    type: NodePort
+    httpPort: 4000
+    fujiPort: 30040
+    nodePortFuji: 30040
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  env:
+    PORT: "4000"
+    FUJI_PORT: "30040"
+    LOG_LEVEL: "info"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+
+# MES Cleanroom Operator Touchscreen HUD Web SPA
+web:
+  replicaCount: 2
+  image:
+    repository: smt-mes-web
+    pullPolicy: IfNotPresent
+    tag: "0.2.0"
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  securityContext:
+    runAsNonRoot: false
+    allowPrivilegeEscalation: false
+
+# Factory Ingress Routing
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+  hosts:
+    - host: mes.smt-factory.internal
+      paths:
+        - path: /
+          pathType: Prefix
+          service: web
+        - path: /api
+          pathType: Prefix
+          service: api
+  tls: []
+
+# Industrial Edge Network Security Hardening
+networkPolicy:
+  enabled: true
+  allowFujiSubnet: "192.168.10.0/24"

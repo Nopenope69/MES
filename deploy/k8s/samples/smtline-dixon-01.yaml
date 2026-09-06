@@ -1,0 +1,23 @@
+apiVersion: mes.antigravity.io/v1alpha1
+kind: SmtLine
+metadata:
+  name: dixon-smt-line-01
+  namespace: default
+spec:
+  lineCode: "LINE-01"
+  plantId: "PLANT-NOIDA-01"
+  placementMachineType: "Fuji NXT III"
+  ratedCph: 75000
+  fujiHostPort: 30040
+  machineIpAddress: "192.168.10.42"
+  modules:
+    - moduleNumber: 1
+      headType: "H12S (12-nozzle high speed)"
+      slots: 20
+    - moduleNumber: 2
+      headType: "H08M (8-nozzle general chip)"
+      slots: 20
+  qualityGates:
+    enforceMslCheck: true
+    enforceSolderPasteCheck: true
+    enforceBarcodeScanMatch: true

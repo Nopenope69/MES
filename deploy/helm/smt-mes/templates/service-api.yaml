@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "smt-mes.fullname" . }}-api
+  labels:
+    {{- include "smt-mes.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.api.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+    - name: fuji-tcp
+      port: {{ .Values.api.service.fujiPort }}
+      targetPort: fuji-tcp
+      protocol: TCP
+      {{- if and (eq .Values.api.service.type "NodePort") .Values.api.service.nodePortFuji }}
+      nodePort: {{ .Values.api.service.nodePortFuji }}
+      {{- end }}
+  selector:
+    {{- include "smt-mes.apiSelectorLabels" . | nindent 4 }}

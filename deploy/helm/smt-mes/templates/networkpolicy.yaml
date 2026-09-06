@@ -1,0 +1,39 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "smt-mes.fullname" . }}-network-policy
+  labels:
+    {{- include "smt-mes.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "smt-mes.apiSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow HTTP API from Ingress Controller and Web frontend pods
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "smt-mes.webSelectorLabels" . | nindent 14 }}
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.service.httpPort }}
+    # Allow Fuji Nexim TCP Socket strictly from OT VLAN Machine Subnet
+    - from:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.allowFujiSubnet | default "192.168.10.0/24" }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.service.fujiPort }}
+  egress:
+    # Allow egress to DNS, database, and local cluster services
+    - to:
+        - namespaceSelector: {}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+{{- end }}
