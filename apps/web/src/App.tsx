@@ -8,8 +8,10 @@ import { OperatorStation } from './components/OperatorStation';
 import { SupervisorDashboard } from './components/SupervisorDashboard';
 import { GenealogyExplorer } from './components/GenealogyExplorer';
 import { AuditTrailViewer } from './components/AuditTrailViewer';
+import { CleanroomComplianceStation } from './components/CleanroomComplianceStation';
+import { AndonTower } from './components/AndonTower';
 
-type NavTab = 'SOLDER_PASTE' | 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL';
+type NavTab = 'SOLDER_PASTE' | 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL' | 'COMPLIANCE';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('OPERATOR');
@@ -120,9 +122,28 @@ export const App: React.FC = () => {
               <Terminal className="w-3.5 h-3.5" />
               <span>04 // RAW TCP</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('COMPLIANCE')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                activeTab === 'COMPLIANCE' 
+                  ? 'bg-[#1D2735] text-[#00E699] font-bold border border-[#00E699]/40 shadow-sm' 
+                  : 'text-[#7A8A9E] hover:text-white'
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>05 // eDHR & AUDIT</span>
+            </button>
           </nav>
         </div>
       </header>
+
+      {/* Cleanroom Ergonomics Bar: Physical Andon Stack & Acoustic Horn */}
+      <div className="bg-[#0B0F15] border-b border-white/10 px-4 sm:px-6 py-2">
+        <div className="max-w-7xl mx-auto">
+          <AndonTower state="NORMAL" activeReason="Line 01 Fuji NXT III M6 • Interlocks Armed • 21 CFR Part 11 Active" />
+        </div>
+      </div>
 
       {/* Main Instrument Display Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
@@ -131,6 +152,7 @@ export const App: React.FC = () => {
         {activeTab === 'SUPERVISOR' && <SupervisorDashboard />}
         {activeTab === 'GENEALOGY' && <GenealogyExplorer />}
         {activeTab === 'AUDIT_TRAIL' && <AuditTrailViewer />}
+        {activeTab === 'COMPLIANCE' && <CleanroomComplianceStation />}
       </main>
 
       {/* Micro-Telemetry Bottom HUD */}
