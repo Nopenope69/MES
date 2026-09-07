@@ -16,6 +16,7 @@ import { aoiRouter } from './routes/aoi.router';
 import { spiRouter } from './routes/spi.router';
 import { MetricsService } from './services/metrics.service';
 import { FujiNeximAdapter } from './adapters/fuji-nexim.adapter';
+import { MachineControlModule } from './modules/machine-control';
 import { RepeatDefectSentinelService } from './services/repeat-defect-sentinel.service';
 import { securityHeadersMiddleware, SimpleRateLimiter } from './security/http-security';
 import { SecretsConfigManager } from './config/secrets';
@@ -128,6 +129,7 @@ async function bootstrap() {
     const fujiPort = parseInt(process.env.FUJI_PORT || '30040', 10);
     fujiAdapter = new FujiNeximAdapter();
     fujiAdapter.startListener(fujiPort);
+    MachineControlModule.getInstance().registerAdapter(fujiAdapter);
 
     RepeatDefectSentinelService.registerFujiCommander(
       (reason) => fujiAdapter?.tripProductionHold(reason) ?? Promise.resolve(),

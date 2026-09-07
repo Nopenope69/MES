@@ -13,7 +13,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { IpFirewall } from '../security/ip-firewall';
 import { SecretsConfigManager } from '../config/secrets';
 
-import { IEquipmentAdapter, EquipmentAdapterStatus } from './equipment-adapter.interface';
+import {
+  IControllableEquipmentAdapter,
+  EquipmentAdapterStatus,
+  MachineCapability,
+  MachineParameterCommand,
+  MachineActionCommand
+} from './equipment-adapter.interface';
 
 /**
  * Production Fuji Nexim TCP Socket Gateway.
@@ -22,7 +28,7 @@ import { IEquipmentAdapter, EquipmentAdapterStatus } from './equipment-adapter.i
  * Includes stream frame accumulator for fragmented/coalesced TCP packets.
  * Includes closed-loop Splicing Verification Interlock (ADR-003 decoupled).
  */
-export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IEquipmentAdapter {
+export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllableEquipmentAdapter {
   readonly id = 'fuji-nxt-01';
   readonly name = 'Fuji NXT III Placement Gateway';
   readonly protocolName = 'Fuji Nexim Host Interface V2.8.0';
@@ -548,6 +554,27 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IEquipmentA
     } catch (err: any) {
       console.error(`[Fuji Gateway] Failed to clear work center hold state:`, err.message);
     }
+  }
+
+  public getCapabilities(): MachineCapability[] {
+    return ['HOLD'];
+  }
+
+  public async tripHold(reason: string, _details?: Record<string, any>): Promise<void> {
+    await this.tripProductionHold(reason);
+  }
+
+  public async clearHold(reason: string): Promise<void> {
+    console.log(`[Fuji Gateway] Clearing hold with reason: ${reason}`);
+    await this.clearProductionHold();
+  }
+
+  public async applyParameters(_commands: MachineParameterCommand[]): Promise<boolean> {
+    return false; // Placement gateway does not support screen printer parameters
+  }
+
+  public async executeAction(_command: MachineActionCommand): Promise<boolean> {
+    return false; // Placement gateway does not support cleaning/divert actions
   }
 
   public isHoldActive(): { active: boolean; reason: string | null } {

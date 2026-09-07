@@ -7,6 +7,7 @@ import {
 } from '@mes/shared';
 import { getDatabase } from '../db/database';
 import { EventIngestionService } from './event-ingestion.service';
+import { MachineControlModule } from '../modules/machine-control/machine-control.module';
 
 export interface SentinelEvaluationResult {
   interlockTripped: boolean;
@@ -30,6 +31,31 @@ export class RepeatDefectSentinelService {
   ): void {
     this.fujiHoldCommander = hold;
     this.fujiClearCommander = clear;
+
+    MachineControlModule.getInstance().registerAdapter({
+      id: 'fuji-legacy-callback-adapter',
+      name: 'Fuji Legacy Callback Adapter',
+      protocolName: 'CALLBACK',
+      workCenterId: 'wc-nxt-01',
+      startListener: () => {},
+      stopListener: () => {},
+      getStatus: () => ({
+        id: 'fuji-legacy-callback-adapter',
+        name: 'Fuji Legacy Callback Adapter',
+        protocolName: 'CALLBACK',
+        workCenterId: 'wc-nxt-01',
+        isRunning: true,
+        port: 0,
+        activeConnections: 1,
+        framesProcessedTotal: 0
+      }),
+      getCapabilities: () => ['HOLD'],
+      tripHold: async (reason: string) => hold(reason),
+      clearHold: async (_reason: string) => clear(),
+      isHoldActive: () => ({ active: true, reason: null }),
+      applyParameters: async () => false,
+      executeAction: async () => false
+    });
   }
 
   /**
@@ -194,15 +220,20 @@ export class RepeatDefectSentinelService {
       }
     });
 
-    // 2. Command upstream placement machine production hold (decoupled from hardware safety E-Stop)
+    // 2. Command upstream placement machine production hold (via MachineControlModule HAL)
     if (this.fujiHoldCommander) {
       await this.fujiHoldCommander(reason);
     } else {
-      const db = getDatabase();
-      await db.execute(
-        `UPDATE work_centers SET current_state = 'QUALITY_HOLD', last_state_change_time = ? WHERE type = 'PICK_AND_PLACE'`,
-        [now]
-      );
+      await MachineControlModule.getInstance().tripInterlock(workCenterId, reason, {
+        programId,
+        programRevision,
+        machineId,
+        refDes,
+        defectType,
+        consecutiveCount,
+        slidingWindowCount,
+        sourceId: 'RepeatDefectSentinelService'
+      });
     }
   }
 
@@ -215,11 +246,7 @@ export class RepeatDefectSentinelService {
     if (this.fujiClearCommander) {
       await this.fujiClearCommander();
     } else {
-      const db = getDatabase();
-      await db.execute(
-        `UPDATE work_centers SET current_state = 'RUNNING', last_state_change_time = ? WHERE type = 'PICK_AND_PLACE'`,
-        [new Date().toISOString()]
-      );
+      await MachineControlModule.getInstance().clearInterlock(workCenterId, authorizedBy, reason);
     }
   }
 }
