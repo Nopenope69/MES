@@ -48,7 +48,13 @@ export const CanonicalEventTypeEnum = z.enum([
   'POST_REWORK_INSPECTION_COMPLETED',
   'REWORK_COMPLETED',
   'REPEAT_DEFECT_INTERLOCK_TRIPPED',
-  'PANEL_SCRAPPED'
+  'PANEL_SCRAPPED',
+  'SPI_INSPECTION_RECORDED',
+  'PRINTER_CLEANING_COMMANDED',
+  'PRINTER_PARAMETERS_MODIFIED',
+  'PRINTER_COMMAND_ACKNOWLEDGED',
+  'CLOSED_LOOP_CORRECTION_VERIFIED',
+  'PRE_REFLOW_PANEL_DIVERTED'
 ]);
 export type CanonicalEventType = z.infer<typeof CanonicalEventTypeEnum>;
 export type MesEventType = CanonicalEventType;
@@ -62,7 +68,10 @@ export const SourceTypeEnum = z.enum([
   'QUALITY_ENGINE',
   'QUALITY_SENTINEL',
   'REWORK_KIOSK',
-  'AOI_POST_REWORK'
+  'AOI_POST_REWORK',
+  'SPI_GATEWAY',
+  'PRINTER_CONTROLLER',
+  'IPC_CFX_BROKER'
 ]);
 export type SourceType = z.infer<typeof SourceTypeEnum>;
 
@@ -425,6 +434,67 @@ export const PanelScrappedPayloadSchema = z.object({
   unitPosition: z.number().int().positive().optional(),
   reason: z.string(),
   authorizedBy: z.string()
+});
+
+// Phase 4: Solder Paste Inspection & Printer Closed-Loop Schemas
+export const SpiInspectionRecordedPayloadSchema = z.object({
+  inspectionId: z.string(),
+  sourceSystem: z.string(),
+  sourceInspectionId: z.string(),
+  sourceFileHash: z.string(),
+  panelBarcode: z.string(),
+  batchId: z.string().optional(),
+  workCenterId: z.string(),
+  opticalMachineId: z.string(),
+  result: z.enum(['PASS', 'WARNING', 'FAIL']),
+  totalPadsInspected: z.number().int().nonnegative(),
+  defectivePadsCount: z.number().int().nonnegative(),
+  meanVolumePct: z.number(),
+  sigmaVolumePct: z.number(),
+  measurements: z.array(z.any()).optional(),
+  durationSeconds: z.number().optional()
+});
+
+export const PrinterCleaningCommandedPayloadSchema = z.object({
+  correctionId: z.string(),
+  workCenterId: z.string(),
+  cleaningMode: z.enum(['DRY', 'VACUUM', 'SOLVENT', 'VACUUM_SOLVENT']),
+  triggerCondition: z.string(),
+  affectedApertures: z.array(z.string()).optional()
+});
+
+export const PrinterParametersModifiedPayloadSchema = z.object({
+  correctionId: z.string(),
+  workCenterId: z.string(),
+  parameterName: z.enum(['SQUEEGEE_PRESSURE', 'SEPARATION_SPEED', 'PRINT_SPEED']),
+  oldValue: z.number(),
+  proposedValue: z.number(),
+  delta: z.number(),
+  unit: z.string().default('kgf'),
+  triggerCondition: z.string(),
+  recipeId: z.string()
+});
+
+export const PrinterCommandAcknowledgedPayloadSchema = z.object({
+  correctionId: z.string(),
+  workCenterId: z.string(),
+  status: z.enum(['ACKNOWLEDGED', 'REJECTED', 'EXECUTED']),
+  printerMessage: z.string().optional()
+});
+
+export const ClosedLoopCorrectionVerifiedPayloadSchema = z.object({
+  correctionId: z.string(),
+  verificationPanelBarcode: z.string(),
+  status: z.enum(['VERIFIED_RECOVERED', 'VERIFIED_FAILED']),
+  observedDeltaVolumePct: z.number(),
+  notes: z.string().optional()
+});
+
+export const PreReflowPanelDivertedPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  reason: z.string(),
+  divertConveyorId: z.string().default('CONVEYOR-WASH-BUF-01'),
+  criticalDefectsCount: z.number()
 });
 
 /**

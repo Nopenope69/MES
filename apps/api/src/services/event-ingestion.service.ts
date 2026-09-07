@@ -38,20 +38,28 @@ import {
   PostReworkInspectionCompletedPayloadSchema,
   ReworkCompletedPayloadSchema,
   RepeatDefectInterlockTrippedPayloadSchema,
-  PanelScrappedPayloadSchema
+  PanelScrappedPayloadSchema,
+  SpiInspectionRecordedPayloadSchema,
+  PrinterCleaningCommandedPayloadSchema,
+  PrinterParametersModifiedPayloadSchema,
+  PrinterCommandAcknowledgedPayloadSchema,
+  ClosedLoopCorrectionVerifiedPayloadSchema,
+  PreReflowPanelDivertedPayloadSchema
 } from '@mes/shared';
 import { getDatabase, IDatabase } from '../db/database';
 import { IEventProjector } from './projectors/projector.interface';
 import { CoreProjector } from './projectors/core.projector';
 import { SmtProjector } from './projectors/smt.projector';
 import { AoiProjector } from './projectors/aoi.projector';
+import { SpiProjector } from './projectors/spi.projector';
 import { EventUpcasterService } from './event-upcaster.service';
 
 export class EventIngestionService {
   private static projectors: IEventProjector[] = [
     new CoreProjector(),
     new SmtProjector(),
-    new AoiProjector()
+    new AoiProjector(),
+    new SpiProjector()
   ];
 
   /**
@@ -233,6 +241,24 @@ export class EventIngestionService {
         break;
       case 'PANEL_SCRAPPED':
         PanelScrappedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'SPI_INSPECTION_RECORDED':
+        SpiInspectionRecordedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'PRINTER_CLEANING_COMMANDED':
+        PrinterCleaningCommandedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'PRINTER_PARAMETERS_MODIFIED':
+        PrinterParametersModifiedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'PRINTER_COMMAND_ACKNOWLEDGED':
+        PrinterCommandAcknowledgedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'CLOSED_LOOP_CORRECTION_VERIFIED':
+        ClosedLoopCorrectionVerifiedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'PRE_REFLOW_PANEL_DIVERTED':
+        PreReflowPanelDivertedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
     }
 

@@ -359,9 +359,19 @@ export type SolderDefectType =
   | 'SOLDER_BALLS';
 
 export type QualityState =
+  | 'PRINTED'
+  | 'SPI_PENDING'
+  | 'SPI_PASSED'
+  | 'SPI_WARNING'
   | 'PASSED'
   | 'FAILED'
   | 'QUALITY_HOLD'
+  | 'REPRINT_REQUIRED'
+  | 'CORRECTION_PENDING'
+  | 'CORRECTION_APPLIED'
+  | 'REINSPECTION_PENDING'
+  | 'REINSPECTION_PASSED'
+  | 'REINSPECTION_FAILED'
   | 'REWORK_PENDING'
   | 'REWORK_IN_PROGRESS'
   | 'REWORK_PASSED'
@@ -436,4 +446,133 @@ export interface QualityRuleConfig {
   slidingWindowPanels: number;
   defaultMaxReworkCycles: number;
 }
+
+// ============================================================================
+// PHASE 4: 3D SPI (Solder Paste Inspection) & Screen Printer Closed Loop
+// ============================================================================
+
+export type SpiDefectType =
+  | 'INSUFFICIENT_PASTE'
+  | 'EXCESS_PASTE'
+  | 'BRIDGING'
+  | 'SMEARING'
+  | 'PEAKING'
+  | 'MISSING_PASTE'
+  | 'COPLANARITY_OFFSET';
+
+export interface SpiPadMeasurement {
+  padId: string;
+  unitPosition: number;
+  refDes: string;
+  pinNo?: number;
+  volumeRatioPct: number; // e.g. 102.5% of nominal
+  heightUm: number;        // e.g. 124.2 um
+  areaRatioPct: number;    // e.g. 98.4%
+  offsetXUm: number;       // e.g. +4.2 um
+  offsetYUm: number;       // e.g. -2.1 um
+  isCriticalPad: boolean;  // BGA / QFN ground pad / fine-pitch
+  defectType?: SpiDefectType;
+}
+
+export interface CanonicalSpiInspectionResult {
+  sourceSystem: string;       // e.g. "KOH_YOUNG_ASPIRE3_CFX", "CYBEROPTICS_SE500"
+  sourceInspectionId: string;
+  sourceFileHash: string;
+  panelBarcode: string;
+  batchId?: string;
+  workCenterId: string;       // e.g. "wc-spi-01"
+  opticalMachineId: string;   // e.g. "KY-ASPIRE3-01"
+  result: 'PASS' | 'WARNING' | 'FAIL';
+  totalPadsInspected: number;
+  defectivePadsCount: number;
+  meanVolumePct: number;
+  sigmaVolumePct: number;
+  measurements: SpiPadMeasurement[];
+  durationSeconds?: number;
+  timestamp: string;
+}
+
+export interface PrinterCapability {
+  equipmentId: string;
+  manufacturer: string;
+  model: string;
+  cfxVersion: string;
+  supports: {
+    stencilCleaning: boolean;
+    parameterModification: boolean;
+    pressureControl: boolean;
+    separationSpeedControl: boolean;
+    printSpeedControl: boolean;
+  };
+}
+
+export interface PrinterProcessLimits {
+  minPressureKgf: number;
+  maxPressureKgf: number;
+  maxAbsoluteDeltaPressure: number;
+  maxPercentageDeltaPressure: number;
+  minSeparationSpeedMmS: number;
+  maxSeparationSpeedMmS: number;
+  maxAbsoluteDeltaSeparationSpeed: number;
+  minTimeBetweenChangesSec: number;
+  maxChangesPerHour: number;
+  cooldownAfterCleaningSec: number;
+}
+
+export interface RecipeProcessWindow {
+  id: string;
+  recipeId: string;
+  recipeRevision: number;
+  stencilId: string;
+  stencilRevision: string;
+  nominalStencilThicknessUm: number;
+  volumeLowerLimitPct: number;   // e.g. 75%
+  volumeUpperLimitPct: number;   // e.g. 135%
+  volumeWarningLowerPct: number; // e.g. 85%
+  volumeWarningUpperPct: number; // e.g. 120%
+  heightLowerLimitUm: number;    // e.g. 90 um
+  heightUpperLimitUm: number;    // e.g. 160 um
+  areaLowerLimitPct: number;     // e.g. 80%
+  maxOffsetUm: number;           // e.g. 50 um
+  nominalPressureKgf: number;    // e.g. 8.5 kgf
+  nominalSeparationSpeedMmS: number; // e.g. 1.2 mm/s
+  limits: PrinterProcessLimits;
+}
+
+export interface PrinterTuningRecord {
+  id: string;
+  correctionId: string;
+  recipeId: string;
+  workCenterId: string;
+  printerModel: string;
+  actionType: 'STENCIL_CLEAN' | 'PARAMETER_MODIFY';
+  cleaningMode?: 'DRY' | 'VACUUM' | 'SOLVENT' | 'VACUUM_SOLVENT';
+  parameterName?: 'SQUEEGEE_PRESSURE' | 'SEPARATION_SPEED' | 'PRINT_SPEED';
+  oldValue?: number;
+  proposedValue?: number;
+  delta?: number;
+  unit?: string;
+  triggerCondition: string;
+  status: 'PROPOSED' | 'COMMANDED' | 'ACKNOWLEDGED' | 'VERIFIED_RECOVERED' | 'VERIFIED_FAILED' | 'REJECTED';
+  commandedAt: string;
+  acknowledgedAt?: string;
+  verifiedAt?: string;
+  verifiedByPanelBarcode?: string;
+  rejectionReason?: string;
+}
+
+export interface SpiSpcMetrics {
+  sampleCount: number;
+  isStatisticallyValid: boolean; // N >= 30
+  meanVolumePct: number;
+  sigmaVolumePct: number;
+  cp?: number;
+  cpk?: number;
+  pp?: number;
+  ppk?: number;
+  trend: 'STABLE' | 'DRIFTING_LOW' | 'DRIFTING_HIGH' | 'INCREASED_VARIABILITY';
+  usl: number;
+  lsl: number;
+}
+
 

@@ -615,4 +615,117 @@ CREATE TABLE IF NOT EXISTS rework_events (
 
 CREATE INDEX IF NOT EXISTS idx_rework_panel ON rework_events(panel_barcode, ref_des);
 
+-- ============================================================================
+-- PHASE 4: Closed-Loop 3D SPI & Screen Printer IPC-CFX Auto-Tuning
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS recipe_process_windows (
+  id VARCHAR(64) PRIMARY KEY,
+  recipe_id VARCHAR(64) NOT NULL,
+  recipe_revision INTEGER NOT NULL DEFAULT 1,
+  stencil_id VARCHAR(64) NOT NULL,
+  stencil_revision VARCHAR(16) NOT NULL DEFAULT 'A',
+  nominal_stencil_thickness_um DECIMAL(6, 2) NOT NULL DEFAULT 120.0,
+  volume_lower_limit_pct DECIMAL(6, 2) NOT NULL DEFAULT 75.0,
+  volume_upper_limit_pct DECIMAL(6, 2) NOT NULL DEFAULT 135.0,
+  volume_warning_lower_pct DECIMAL(6, 2) NOT NULL DEFAULT 85.0,
+  volume_warning_upper_pct DECIMAL(6, 2) NOT NULL DEFAULT 120.0,
+  height_lower_limit_um DECIMAL(6, 2) NOT NULL DEFAULT 90.0,
+  height_upper_limit_um DECIMAL(6, 2) NOT NULL DEFAULT 160.0,
+  area_lower_limit_pct DECIMAL(6, 2) NOT NULL DEFAULT 80.0,
+  max_offset_um DECIMAL(6, 2) NOT NULL DEFAULT 50.0,
+  nominal_pressure_kgf DECIMAL(6, 2) NOT NULL DEFAULT 8.5,
+  nominal_separation_speed_mm_s DECIMAL(6, 2) NOT NULL DEFAULT 1.2,
+  min_pressure_kgf DECIMAL(6, 2) NOT NULL DEFAULT 6.0,
+  max_pressure_kgf DECIMAL(6, 2) NOT NULL DEFAULT 12.0,
+  max_abs_delta_pressure DECIMAL(6, 2) NOT NULL DEFAULT 0.5,
+  max_pct_delta_pressure DECIMAL(6, 2) NOT NULL DEFAULT 5.0,
+  min_separation_speed_mm_s DECIMAL(6, 2) NOT NULL DEFAULT 0.5,
+  max_separation_speed_mm_s DECIMAL(6, 2) NOT NULL DEFAULT 3.0,
+  max_abs_delta_separation_speed DECIMAL(6, 2) NOT NULL DEFAULT 0.2,
+  min_time_between_changes_sec INTEGER NOT NULL DEFAULT 180,
+  max_changes_per_hour INTEGER NOT NULL DEFAULT 4,
+  cooldown_after_cleaning_sec INTEGER NOT NULL DEFAULT 60,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS printer_capabilities (
+  equipment_id VARCHAR(64) PRIMARY KEY,
+  manufacturer VARCHAR(64) NOT NULL,
+  model VARCHAR(64) NOT NULL,
+  cfx_version VARCHAR(16) NOT NULL DEFAULT '1.7',
+  supports_stencil_cleaning INTEGER NOT NULL DEFAULT 1,
+  supports_parameter_modification INTEGER NOT NULL DEFAULT 1,
+  supports_pressure_control INTEGER NOT NULL DEFAULT 1,
+  supports_separation_speed_control INTEGER NOT NULL DEFAULT 1,
+  supports_print_speed_control INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS spi_inspections (
+  id VARCHAR(64) PRIMARY KEY,
+  source_system VARCHAR(64) NOT NULL,
+  source_inspection_id VARCHAR(128) NOT NULL,
+  source_file_hash VARCHAR(64) NOT NULL,
+  panel_barcode VARCHAR(64) NOT NULL,
+  batch_id VARCHAR(64),
+  work_center_id VARCHAR(64) NOT NULL,
+  optical_machine_id VARCHAR(64) NOT NULL,
+  result VARCHAR(16) NOT NULL,
+  total_pads_inspected INTEGER NOT NULL DEFAULT 0,
+  defective_pads_count INTEGER NOT NULL DEFAULT 0,
+  mean_volume_pct DECIMAL(6, 2),
+  sigma_volume_pct DECIMAL(6, 2),
+  duration_seconds DECIMAL(8, 2),
+  inspected_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source_system, source_inspection_id, source_file_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_spi_panel ON spi_inspections(panel_barcode);
+
+CREATE TABLE IF NOT EXISTS spi_pad_measurements (
+  id VARCHAR(64) PRIMARY KEY,
+  inspection_id VARCHAR(64) NOT NULL,
+  panel_barcode VARCHAR(64) NOT NULL,
+  pad_id VARCHAR(64) NOT NULL,
+  unit_position INTEGER NOT NULL DEFAULT 1,
+  ref_des VARCHAR(32) NOT NULL,
+  pin_no INTEGER,
+  volume_ratio_pct DECIMAL(6, 2) NOT NULL,
+  height_um DECIMAL(6, 2) NOT NULL,
+  area_ratio_pct DECIMAL(6, 2) NOT NULL,
+  offset_x_um DECIMAL(6, 2) NOT NULL,
+  offset_y_um DECIMAL(6, 2) NOT NULL,
+  is_critical_pad INTEGER NOT NULL DEFAULT 0,
+  defect_type VARCHAR(32),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_spi_pad_panel ON spi_pad_measurements(panel_barcode, ref_des);
+
+CREATE TABLE IF NOT EXISTS printer_tuning_events (
+  id VARCHAR(64) PRIMARY KEY,
+  correction_id VARCHAR(64) UNIQUE NOT NULL,
+  recipe_id VARCHAR(64) NOT NULL,
+  work_center_id VARCHAR(64) NOT NULL,
+  action_type VARCHAR(32) NOT NULL,
+  cleaning_mode VARCHAR(32),
+  parameter_name VARCHAR(32),
+  old_value DECIMAL(8, 3),
+  proposed_value DECIMAL(8, 3),
+  delta DECIMAL(8, 3),
+  unit VARCHAR(16) DEFAULT 'kgf',
+  trigger_condition TEXT NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'PROPOSED',
+  commanded_at TIMESTAMP NOT NULL,
+  acknowledged_at TIMESTAMP,
+  verified_at TIMESTAMP,
+  verified_by_panel_barcode VARCHAR(64),
+  rejection_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_tuning_correction ON printer_tuning_events(correction_id);
+
+
 

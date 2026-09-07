@@ -13,6 +13,7 @@ import { smtRouter } from './routes/smt.router';
 import { complianceRouter } from './routes/compliance.router';
 import { sreRouter } from './routes/sre.router';
 import { aoiRouter } from './routes/aoi.router';
+import { spiRouter } from './routes/spi.router';
 import { MetricsService } from './services/metrics.service';
 import { FujiNeximAdapter } from './adapters/fuji-nexim.adapter';
 import { RepeatDefectSentinelService } from './services/repeat-defect-sentinel.service';
@@ -55,6 +56,7 @@ app.use('/api/v1/smt', smtRouter);
 app.use('/api/v1/compliance', complianceRouter);
 app.use('/api/v1/sre', sreRouter);
 app.use('/api/v1/aoi', aoiRouter);
+app.use('/api/v1/spi', spiRouter);
 
 // Prometheus Metrics Endpoint
 app.get('/metrics', (_req, res) => {

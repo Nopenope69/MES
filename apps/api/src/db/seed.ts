@@ -7,6 +7,11 @@ export async function seedDatabase(): Promise<void> {
 
   console.log('[SEED] Clearing existing records for clean SMT factory state...');
   await db.execScript(`
+    DELETE FROM printer_tuning_events;
+    DELETE FROM spi_pad_measurements;
+    DELETE FROM spi_inspections;
+    DELETE FROM printer_capabilities;
+    DELETE FROM recipe_process_windows;
     DELETE FROM rework_events;
     DELETE FROM rework_dispositions;
     DELETE FROM aoi_defects;
@@ -349,6 +354,85 @@ export async function seedDatabase(): Promise<void> {
       45.20, 180.50, 28.50, 'TOP', 'OPEN', 'img/aoi/ky-zenith-01/pnl-0042-u3-c12.png'
     )
   `, [demoPanel]);
+
+  console.log('[SEED] Inserting Phase 4 Recipe Process Windows & Screen Printer Capabilities...');
+  await db.execute(`
+    INSERT INTO recipe_process_windows (
+      id, recipe_id, recipe_revision, stencil_id, stencil_revision,
+      nominal_stencil_thickness_um, volume_lower_limit_pct, volume_upper_limit_pct,
+      volume_warning_lower_pct, volume_warning_upper_pct, height_lower_limit_um,
+      height_upper_limit_um, area_lower_limit_pct, max_offset_um,
+      nominal_pressure_kgf, nominal_separation_speed_mm_s, min_pressure_kgf,
+      max_pressure_kgf, max_abs_delta_pressure, max_pct_delta_pressure,
+      min_separation_speed_mm_s, max_separation_speed_mm_s, max_abs_delta_separation_speed,
+      min_time_between_changes_sec, max_changes_per_hour, cooldown_after_cleaning_sec
+    ) VALUES (
+      'rpw-sm-01', 'PROG-SM-METER-TOP-REV4', 4, 'STC-SM-4G-TOP', 'A',
+      120.0, 75.0, 135.0, 85.0, 120.0, 90.0, 160.0, 80.0, 50.0,
+      8.5, 1.2, 6.0, 12.0, 0.5, 5.0, 0.5, 3.0, 0.2, 180, 4, 60
+    )
+  `);
+
+  await db.execute(`
+    INSERT INTO printer_capabilities (
+      equipment_id, manufacturer, model, cfx_version,
+      supports_stencil_cleaning, supports_parameter_modification,
+      supports_pressure_control, supports_separation_speed_control, supports_print_speed_control
+    ) VALUES (
+      'wc-spg-01', 'Fuji Machine MFG', 'Fuji GPX-C Screen Printer', '1.7',
+      1, 1, 1, 1, 1
+    )
+  `);
+
+  console.log('[SEED] Inserting Baseline 3D SPI Inspection & Aperture Measurements...');
+  await db.execute(`
+    INSERT INTO spi_inspections (
+      id, source_system, source_inspection_id, source_file_hash,
+      panel_barcode, batch_id, work_center_id, optical_machine_id,
+      result, total_pads_inspected, defective_pads_count,
+      mean_volume_pct, sigma_volume_pct, duration_seconds, inspected_at
+    ) VALUES (
+      'spi-insp-demo-01', 'KOH_YOUNG_ASPIRE3_CFX', 'KY-SPI-20260907-0042', 'hash-spi-0042-seed',
+      ?, 'job-01', 'wc-spg-01', 'KY-ASPIRE3-01',
+      'WARNING', 120, 1, 102.4, 8.2, 12.5, ?
+    )
+  `, [demoPanel, now]);
+
+  // Seed sample aperture measurements on panel units
+  const pads = [
+    { padId: 'PAD-U3-P1', unit: 3, refDes: 'U3', pin: 1, vol: 138.5, ht: 168.0, area: 112.0, xOff: 4.2, yOff: 2.1, crit: 1, def: 'SMEARING' },
+    { padId: 'PAD-C12-P1', unit: 3, refDes: 'C12', pin: 1, vol: 82.0, ht: 104.0, area: 90.0, xOff: -1.2, yOff: 0.5, crit: 0, def: null },
+    { padId: 'PAD-C12-P2', unit: 3, refDes: 'C12', pin: 2, vol: 78.5, ht: 98.0, area: 88.0, xOff: 2.1, yOff: -0.8, crit: 0, def: null },
+    { padId: 'PAD-U1-P1', unit: 1, refDes: 'C14', pin: 1, vol: 104.2, ht: 122.5, area: 101.0, xOff: 0.5, yOff: -0.2, crit: 0, def: null },
+    { padId: 'PAD-MOD1-P1', unit: 1, refDes: 'MOD1', pin: 1, vol: 101.0, ht: 121.0, area: 99.5, xOff: 0.1, yOff: 0.1, crit: 1, def: null }
+  ];
+
+  for (const p of pads) {
+    await db.execute(`
+      INSERT INTO spi_pad_measurements (
+        id, inspection_id, panel_barcode, pad_id, unit_position,
+        ref_des, pin_no, volume_ratio_pct, height_um, area_ratio_pct,
+        offset_x_um, offset_y_um, is_critical_pad, defect_type
+      ) VALUES (?, 'spi-insp-demo-01', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      `meas-${p.padId}`, demoPanel, p.padId, p.unit, p.refDes, p.pin,
+      p.vol, p.ht, p.area, p.xOff, p.yOff, p.crit, p.def
+    ]);
+  }
+
+  // Baseline closed loop printer tuning event
+  await db.execute(`
+    INSERT INTO printer_tuning_events (
+      id, correction_id, recipe_id, work_center_id, action_type,
+      cleaning_mode, parameter_name, old_value, proposed_value, delta, unit,
+      trigger_condition, status, commanded_at, acknowledged_at, verified_at, verified_by_panel_barcode
+    ) VALUES (
+      'tune-01', 'CORR-20260907-001', 'PROG-SM-METER-TOP-REV4', 'wc-spg-01', 'STENCIL_CLEAN',
+      'VACUUM_SOLVENT', NULL, NULL, NULL, NULL, NULL,
+      'Aperture smear detected on fine-pitch pad PAD-U3-P1 (Volume 138.5% > 135% limit)',
+      'VERIFIED_RECOVERED', ?, ?, ?, ?
+    )
+  `, [now, now, now, demoPanel]);
 
   console.log('[SEED] Dixon SMT Line 01 successfully populated with authentic high-speed SMT data.');
 }
