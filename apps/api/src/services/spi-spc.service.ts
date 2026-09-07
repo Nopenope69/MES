@@ -14,16 +14,25 @@ export class SpiSpcService {
     const usl = processWindow.volumeUpperLimitPct || 135.0;
     const lsl = processWindow.volumeLowerLimitPct || 75.0;
 
-    // Fetch recent inspections
+    // Fetch recent inspections filtered by recipe
+    let querySql = `
+      SELECT s.mean_volume_pct FROM spi_inspections s
+      LEFT JOIN batches b ON s.batch_id = b.id
+      WHERE s.mean_volume_pct IS NOT NULL
+    `;
+    const queryParams: any[] = [];
+
+    if (recipeId) {
+      querySql += ` AND (b.recipe_code = ? OR s.batch_id = ? OR s.batch_id IS NULL)`;
+      queryParams.push(recipeId, recipeId);
+    }
+
+    querySql += ` ORDER BY s.inspected_at DESC LIMIT ?`;
+    queryParams.push(limit);
+
     const rows = await db.query<{
       mean_volume_pct: number;
-    }>(
-      `SELECT mean_volume_pct FROM spi_inspections
-       WHERE mean_volume_pct IS NOT NULL
-       ORDER BY inspected_at DESC
-       LIMIT ?`,
-      [limit]
-    );
+    }>(querySql, queryParams);
 
     const samples = rows.map((r) => Number(r.mean_volume_pct)).filter((v) => !isNaN(v) && v > 0);
     const n = samples.length;

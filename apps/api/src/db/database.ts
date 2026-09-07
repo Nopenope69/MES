@@ -38,17 +38,29 @@ class NodeSqliteDatabase implements IDatabase {
     this.db.close();
   }
 
+  private transactionDepth = 0;
+
   async withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T> {
-    this.db.exec('BEGIN IMMEDIATE;');
+    const isTopLevel = this.transactionDepth === 0;
+    if (isTopLevel) {
+      this.db.exec('BEGIN IMMEDIATE;');
+    }
+    this.transactionDepth++;
     try {
       const result = await fn(this);
-      this.db.exec('COMMIT;');
+      this.transactionDepth--;
+      if (isTopLevel) {
+        this.db.exec('COMMIT;');
+      }
       return result;
     } catch (error) {
-      try {
-        this.db.exec('ROLLBACK;');
-      } catch {
-        // Ignored if already rolled back
+      this.transactionDepth--;
+      if (isTopLevel) {
+        try {
+          this.db.exec('ROLLBACK;');
+        } catch {
+          // Ignored if already rolled back
+        }
       }
       throw error;
     }

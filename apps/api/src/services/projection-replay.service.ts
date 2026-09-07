@@ -4,6 +4,8 @@ import { getDatabase, IDatabase } from '../db/database';
 import { IEventProjector } from './projectors/projector.interface';
 import { CoreProjector } from './projectors/core.projector';
 import { SmtProjector } from './projectors/smt.projector';
+import { AoiProjector } from './projectors/aoi.projector';
+import { SpiProjector } from './projectors/spi.projector';
 import { EventUpcasterService } from './event-upcaster.service';
 
 export interface ProjectionCheckpoint {
@@ -34,7 +36,9 @@ export interface AggregateSnapshot<T = any> {
 export class ProjectionReplayService {
   private static defaultProjectors: IEventProjector[] = [
     new CoreProjector(),
-    new SmtProjector()
+    new SmtProjector(),
+    new AoiProjector(),
+    new SpiProjector()
   ];
 
   /**

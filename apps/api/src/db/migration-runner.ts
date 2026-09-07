@@ -132,6 +132,52 @@ export class MigrationRunner {
     };
   }
 
+  public static readonly SYNC_TABLES: string[] = [
+    'sites',
+    'areas',
+    'work_centers',
+    'dry_cabinets',
+    'msl_bake_profiles',
+    'component_reels',
+    'msl_exposure_logs',
+    'solder_paste_profiles',
+    'solder_paste_jars',
+    'stencils',
+    'stencil_sessions',
+    'stencil_paste_loads',
+    'smt_feeder_slots',
+    'work_orders',
+    'batches',
+    'panel_checkouts',
+    'material_consumptions',
+    'equipment_state_logs',
+    'downtime_attributions',
+    'ingress_events',
+    'production_events',
+    'projection_checkpoints',
+    'projection_snapshots',
+    'compliance_audit_ledger',
+    'device_history_records',
+    // Phase 3: Closed-Loop 3D AOI & Rework
+    'quality_rules',
+    'pcb_cad_definitions',
+    'panel_units',
+    'aoi_inspections',
+    'aoi_defects',
+    'rework_dispositions',
+    'rework_events',
+    // Phase 4: Closed-Loop 3D SPI & Screen Printer CFX Auto-Tuning
+    'recipe_process_windows',
+    'printer_capabilities',
+    'spi_inspections',
+    'spi_pad_measurements',
+    'printer_tuning_events'
+  ];
+
+  public getSyncTables(): string[] {
+    return [...MigrationRunner.SYNC_TABLES];
+  }
+
   /**
    * Migrates existing factory data from SQLite into PostgreSQL with foreign-key preservation.
    */
@@ -140,33 +186,7 @@ export class MigrationRunner {
     const startTime = Date.now();
 
     // Ordered list of tables to respect foreign key constraints
-    const tablesToSync = [
-      'sites',
-      'areas',
-      'work_centers',
-      'dry_cabinets',
-      'msl_bake_profiles',
-      'component_reels',
-      'msl_exposure_logs',
-      'solder_paste_profiles',
-      'solder_paste_jars',
-      'stencils',
-      'stencil_sessions',
-      'stencil_paste_loads',
-      'smt_feeder_slots',
-      'work_orders',
-      'batches',
-      'panel_checkouts',
-      'material_consumptions',
-      'equipment_state_logs',
-      'downtime_attributions',
-      'ingress_events',
-      'production_events',
-      'projection_checkpoints',
-      'projection_snapshots',
-      'compliance_audit_ledger',
-      'device_history_records'
-    ];
+    const tablesToSync = this.getSyncTables();
 
     const tableDetails: Record<string, number> = {};
     let totalCopied = 0;

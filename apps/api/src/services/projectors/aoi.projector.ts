@@ -55,6 +55,29 @@ export class AoiProjector implements IEventProjector {
           event.eventTime
         ]);
 
+        if (p.result === 'PASS') {
+          const existingUnits = await tx.query<any>(
+            'SELECT id, unit_position FROM panel_units WHERE panel_barcode = ?',
+            [p.panelBarcode]
+          );
+
+          if (existingUnits.length > 0) {
+            await tx.execute(`
+              UPDATE panel_units
+              SET status = 'PASSED', updated_at = CURRENT_TIMESTAMP
+              WHERE panel_barcode = ? AND status != 'SCRAPPED'
+            `, [p.panelBarcode]);
+          } else {
+            await tx.execute(`
+              INSERT INTO panel_units (id, panel_barcode, unit_position, status)
+              VALUES (?, ?, 1, 'PASSED')
+              ON CONFLICT(panel_barcode, unit_position) DO UPDATE SET
+                status = 'PASSED',
+                updated_at = CURRENT_TIMESTAMP
+            `, [uuidv4(), p.panelBarcode]);
+          }
+        }
+
         if (Array.isArray(p.defects)) {
           for (const d of p.defects) {
             const defectId = d.defectId || uuidv4();
