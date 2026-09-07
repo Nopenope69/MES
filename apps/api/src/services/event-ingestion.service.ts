@@ -27,18 +27,31 @@ import {
   PasteRemovedFromStencilPayloadSchema,
   PasteDiscardedPayloadSchema,
   StencilSessionStartedPayloadSchema,
-  StencilSessionEndedPayloadSchema
+  StencilSessionEndedPayloadSchema,
+  AoiInspectionCompletedPayloadSchema,
+  SpiInspectionCompletedPayloadSchema,
+  DefectRecordedPayloadSchema,
+  QualityHoldAppliedPayloadSchema,
+  QualityDispositionDecidedPayloadSchema,
+  ReworkStartedPayloadSchema,
+  ComponentReplacedPayloadSchema,
+  PostReworkInspectionCompletedPayloadSchema,
+  ReworkCompletedPayloadSchema,
+  RepeatDefectInterlockTrippedPayloadSchema,
+  PanelScrappedPayloadSchema
 } from '@mes/shared';
 import { getDatabase, IDatabase } from '../db/database';
 import { IEventProjector } from './projectors/projector.interface';
 import { CoreProjector } from './projectors/core.projector';
 import { SmtProjector } from './projectors/smt.projector';
+import { AoiProjector } from './projectors/aoi.projector';
 import { EventUpcasterService } from './event-upcaster.service';
 
 export class EventIngestionService {
   private static projectors: IEventProjector[] = [
     new CoreProjector(),
-    new SmtProjector()
+    new SmtProjector(),
+    new AoiProjector()
   ];
 
   /**
@@ -187,6 +200,39 @@ export class EventIngestionService {
         break;
       case 'STENCIL_SESSION_ENDED':
         StencilSessionEndedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'AOI_INSPECTION_COMPLETED':
+        AoiInspectionCompletedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'SPI_INSPECTION_COMPLETED':
+        SpiInspectionCompletedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'DEFECT_RECORDED':
+        DefectRecordedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'QUALITY_HOLD_APPLIED':
+        QualityHoldAppliedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'QUALITY_DISPOSITION_DECIDED':
+        QualityDispositionDecidedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'REWORK_STARTED':
+        ReworkStartedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'COMPONENT_REPLACED':
+        ComponentReplacedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'POST_REWORK_INSPECTION_COMPLETED':
+        PostReworkInspectionCompletedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'REWORK_COMPLETED':
+        ReworkCompletedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'REPEAT_DEFECT_INTERLOCK_TRIPPED':
+        RepeatDefectInterlockTrippedPayloadSchema.parse(upcastedEnvelope.payload);
+        break;
+      case 'PANEL_SCRAPPED':
+        PanelScrappedPayloadSchema.parse(upcastedEnvelope.payload);
         break;
     }
 

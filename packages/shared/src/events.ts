@@ -37,7 +37,18 @@ export const CanonicalEventTypeEnum = z.enum([
   'OUTPUT_RECORDED',
   'DOWNTIME_RECORDED',
   'PRODUCTION_STOPPED',
-  'BATCH_COMPLETED'
+  'BATCH_COMPLETED',
+  'SPI_INSPECTION_COMPLETED',
+  'AOI_INSPECTION_COMPLETED',
+  'DEFECT_RECORDED',
+  'QUALITY_HOLD_APPLIED',
+  'QUALITY_DISPOSITION_DECIDED',
+  'REWORK_STARTED',
+  'COMPONENT_REPLACED',
+  'POST_REWORK_INSPECTION_COMPLETED',
+  'REWORK_COMPLETED',
+  'REPEAT_DEFECT_INTERLOCK_TRIPPED',
+  'PANEL_SCRAPPED'
 ]);
 export type CanonicalEventType = z.infer<typeof CanonicalEventTypeEnum>;
 export type MesEventType = CanonicalEventType;
@@ -46,7 +57,12 @@ export const SourceTypeEnum = z.enum([
   'MANUAL_UI',
   'INTEGRATION_SOCKET',
   'SYSTEM',
-  'CSV_IMPORT'
+  'CSV_IMPORT',
+  'AOI_GATEWAY',
+  'QUALITY_ENGINE',
+  'QUALITY_SENTINEL',
+  'REWORK_KIOSK',
+  'AOI_POST_REWORK'
 ]);
 export type SourceType = z.infer<typeof SourceTypeEnum>;
 
@@ -299,6 +315,116 @@ export const StencilSessionEndedPayloadSchema = z.object({
   stencilId: z.string(),
   totalPanelsPrinted: z.number().int().nonnegative().optional(),
   operatorId: z.string().optional()
+});
+
+export const AoiInspectionCompletedPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  batchId: z.string().optional(),
+  inspectionPhase: z.enum(['POST_REFLOW', 'PRE_REFLOW', 'POST_REWORK']).default('POST_REFLOW'),
+  result: z.enum(['PASS', 'FAIL']),
+  totalDefects: z.number().int().nonnegative(),
+  inspectionDurationSeconds: z.number().optional(),
+  opticalMachineId: z.string(),
+  sourceSystem: z.string(),
+  sourceInspectionId: z.string(),
+  sourceFileHash: z.string()
+});
+
+export const DefectRecordedPayloadSchema = z.object({
+  defectId: z.string(),
+  panelBarcode: z.string(),
+  unitPosition: z.number().int().positive().default(1),
+  refDes: z.string(),
+  defectCategory: z.enum(['COMPONENT', 'SOLDER']),
+  defectType: z.string(),
+  defectSignature: z.string(),
+  offsetXUm: z.number().optional(),
+  offsetYUm: z.number().optional(),
+  rotationDeg: z.number().optional(),
+  boardSide: z.enum(['TOP', 'BOTTOM']).default('TOP')
+});
+
+export const QualityHoldAppliedPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  holdReason: z.string(),
+  defectCount: z.number().int().positive(),
+  workCenterId: z.string(),
+  appliedBy: z.string().default('QUALITY_ENGINE')
+});
+
+export const QualityDispositionPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  unitPosition: z.number().int().positive().optional(),
+  defectId: z.string().optional(),
+  disposition: z.enum(['REWORK', 'SCRAP', 'ACCEPT_AS_IS', 'REINSPECT']),
+  reason: z.string(),
+  authorizedBy: z.string()
+});
+
+export const ComponentReplacedPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  unitPosition: z.number().int().positive().default(1),
+  refDes: z.string(),
+  defectId: z.string(),
+  technicianId: z.string(),
+  oldMpn: z.string(),
+  oldReelId: z.string().optional(),
+  replacementMpn: z.string(),
+  replacementReelId: z.string(),
+  reworkMethod: z.string().default('HOT_AIR_DESOLDER_SOLDERING_IRON'),
+  temperatureProfileId: z.string().optional(),
+  reworkCycle: z.number().int().positive()
+});
+
+export const PostReworkInspectionPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  defectId: z.string().optional(),
+  inspectorId: z.string(),
+  result: z.enum(['PASS', 'FAIL']),
+  comments: z.string().optional()
+});
+
+export const SpiInspectionCompletedPayloadSchema = AoiInspectionCompletedPayloadSchema;
+
+export const QualityDispositionDecidedPayloadSchema = QualityDispositionPayloadSchema;
+
+export const ReworkStartedPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  unitPosition: z.number().int().positive().default(1),
+  technicianId: z.string(),
+  defectId: z.string().optional()
+});
+
+export const PostReworkInspectionCompletedPayloadSchema = PostReworkInspectionPayloadSchema;
+
+export const ReworkCompletedPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  unitPosition: z.number().int().positive().default(1),
+  defectId: z.string().optional(),
+  technicianId: z.string(),
+  reworkCycle: z.number().int().positive().optional(),
+  notes: z.string().optional()
+});
+
+export const RepeatDefectInterlockTrippedPayloadSchema = z.object({
+  programId: z.string().optional(),
+  programRevision: z.number().optional(),
+  workCenterId: z.string(),
+  machineId: z.string().optional(),
+  refDes: z.string().optional(),
+  defectType: z.string().optional(),
+  consecutiveCount: z.number().optional(),
+  slidingWindowFailures: z.number().optional(),
+  thresholdLimit: z.number().optional(),
+  actionTaken: z.string().optional(),
+  reason: z.string().optional()
+});
+
+export const PanelScrappedPayloadSchema = z.object({
+  panelBarcode: z.string(),
+  unitPosition: z.number().int().positive().optional(),
+  reason: z.string(),
+  authorizedBy: z.string()
 });
 
 /**

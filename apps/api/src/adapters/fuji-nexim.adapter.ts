@@ -517,6 +517,46 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IEquipmentA
     this.stop();
   }
 
+  private isProductionHold: boolean = false;
+  private productionHoldReason: string | null = null;
+
+  public async tripProductionHold(reason: string): Promise<void> {
+    this.isProductionHold = true;
+    this.productionHoldReason = reason;
+    console.warn(`[Fuji Gateway] PRODUCTION HOLD TRIPPED for ${this.workCenterId}: ${reason}`);
+    try {
+      const db = getDatabase();
+      await db.execute(
+        `UPDATE work_centers SET current_state = 'QUALITY_HOLD', last_state_change_time = ? WHERE id = ?`,
+        [new Date().toISOString(), this.workCenterId]
+      );
+    } catch (err: any) {
+      console.error(`[Fuji Gateway] Failed to update work center hold state:`, err.message);
+    }
+  }
+
+  public async clearProductionHold(): Promise<void> {
+    this.isProductionHold = false;
+    this.productionHoldReason = null;
+    console.log(`[Fuji Gateway] Production hold CLEARED for ${this.workCenterId}`);
+    try {
+      const db = getDatabase();
+      await db.execute(
+        `UPDATE work_centers SET current_state = 'RUNNING', last_state_change_time = ? WHERE id = ?`,
+        [new Date().toISOString(), this.workCenterId]
+      );
+    } catch (err: any) {
+      console.error(`[Fuji Gateway] Failed to clear work center hold state:`, err.message);
+    }
+  }
+
+  public isHoldActive(): { active: boolean; reason: string | null } {
+    return {
+      active: this.isProductionHold,
+      reason: this.productionHoldReason
+    };
+  }
+
   public getStatus(): EquipmentAdapterStatus {
     return {
       id: this.id,
@@ -531,3 +571,4 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IEquipmentA
     };
   }
 }
+

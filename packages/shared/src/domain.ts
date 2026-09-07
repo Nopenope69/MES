@@ -334,3 +334,106 @@ export interface GenealogyTree {
   nodes: GenealogyNode[];
   edges: GenealogyEdge[];
 }
+
+// ============================================================================
+// Phase 3: Closed-Loop Quality Engine, AOI & Rework Domain Interfaces
+// ============================================================================
+
+export type DefectCategory = 'COMPONENT' | 'SOLDER';
+
+export type ComponentDefectType =
+  | 'MISSING'
+  | 'WRONG_PART'
+  | 'POLARITY_INVERTED'
+  | 'OFFSET_X_Y'
+  | 'ROTATION_SKEW'
+  | 'BILLBOARD';
+
+export type SolderDefectType =
+  | 'TOMBSTONE'
+  | 'BRIDGE'
+  | 'INSUFFICIENT'
+  | 'EXCESS'
+  | 'VOIDING'
+  | 'OPEN'
+  | 'SOLDER_BALLS';
+
+export type QualityState =
+  | 'PASSED'
+  | 'FAILED'
+  | 'QUALITY_HOLD'
+  | 'REWORK_PENDING'
+  | 'REWORK_IN_PROGRESS'
+  | 'REWORK_PASSED'
+  | 'REWORK_FAILED'
+  | 'SCRAPPED'
+  | 'RELEASED';
+
+export type QualityDispositionType = 'REWORK' | 'SCRAP' | 'ACCEPT_AS_IS' | 'REINSPECT';
+
+export interface DefectSignature {
+  programId: string;
+  programRevision: number;
+  workCenterId: string;
+  machineId: string;
+  refDes: string;
+  defectType: string;
+}
+
+export interface CadCoordinateDefinition {
+  productId: string;
+  productRevision: number;
+  programId: string;
+  programRevision: number;
+  boardSide: 'TOP' | 'BOTTOM';
+  cadRevision: string;
+  refDes: string;
+  unitPosition: number;
+  xMm: number;
+  yMm: number;
+  rotationDeg: number;
+  packageType: string;
+  mpn: string;
+  maxReworkCycles: number;
+}
+
+export interface CanonicalAoiDefect {
+  defectId: string;
+  unitPosition: number;
+  refDes: string;
+  category: DefectCategory;
+  defectType: string;
+  boardSide: 'TOP' | 'BOTTOM';
+  offsetXUm?: number;
+  offsetYUm?: number;
+  rotationDeg?: number;
+  defectSignature?: string;
+  imageRef?: string;
+}
+
+export interface CanonicalAoiInspectionResult {
+  sourceSystem: string;
+  sourceInspectionId: string;
+  sourceFileHash: string;
+  panelBarcode: string;
+  batchId?: string;
+  workCenterId: string;
+  opticalMachineId: string;
+  inspectionPhase: 'POST_REFLOW' | 'PRE_REFLOW' | 'POST_REWORK';
+  result: 'PASS' | 'FAIL';
+  totalDefects: number;
+  defects: CanonicalAoiDefect[];
+  durationSeconds?: number;
+  timestamp: string;
+}
+
+export interface QualityRuleConfig {
+  id: string;
+  productId?: string;
+  programId?: string;
+  consecutiveFailureLimit: number;
+  slidingWindowFailures: number;
+  slidingWindowPanels: number;
+  defaultMaxReworkCycles: number;
+}
+

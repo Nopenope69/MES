@@ -12,8 +12,10 @@ import { genealogyRouter } from './routes/genealogy.router';
 import { smtRouter } from './routes/smt.router';
 import { complianceRouter } from './routes/compliance.router';
 import { sreRouter } from './routes/sre.router';
+import { aoiRouter } from './routes/aoi.router';
 import { MetricsService } from './services/metrics.service';
 import { FujiNeximAdapter } from './adapters/fuji-nexim.adapter';
+import { RepeatDefectSentinelService } from './services/repeat-defect-sentinel.service';
 import { securityHeadersMiddleware, SimpleRateLimiter } from './security/http-security';
 import { SecretsConfigManager } from './config/secrets';
 
@@ -52,6 +54,7 @@ app.use('/api/v1/genealogy', genealogyRouter);
 app.use('/api/v1/smt', smtRouter);
 app.use('/api/v1/compliance', complianceRouter);
 app.use('/api/v1/sre', sreRouter);
+app.use('/api/v1/aoi', aoiRouter);
 
 // Prometheus Metrics Endpoint
 app.get('/metrics', (_req, res) => {
@@ -123,6 +126,11 @@ async function bootstrap() {
     const fujiPort = parseInt(process.env.FUJI_PORT || '30040', 10);
     fujiAdapter = new FujiNeximAdapter();
     fujiAdapter.startListener(fujiPort);
+
+    RepeatDefectSentinelService.registerFujiCommander(
+      (reason) => fujiAdapter?.tripProductionHold(reason) ?? Promise.resolve(),
+      () => fujiAdapter?.clearProductionHold() ?? Promise.resolve()
+    );
 
     app.listen(PORT, () => {
       console.log(`[API] MES HTTP Server running on http://localhost:${PORT}`);

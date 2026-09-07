@@ -7,6 +7,13 @@ export async function seedDatabase(): Promise<void> {
 
   console.log('[SEED] Clearing existing records for clean SMT factory state...');
   await db.execScript(`
+    DELETE FROM rework_events;
+    DELETE FROM rework_dispositions;
+    DELETE FROM aoi_defects;
+    DELETE FROM aoi_inspections;
+    DELETE FROM panel_units;
+    DELETE FROM pcb_cad_definitions;
+    DELETE FROM quality_rules;
     DELETE FROM stencil_paste_loads;
     DELETE FROM stencil_sessions;
     DELETE FROM stencils;
@@ -275,6 +282,73 @@ export async function seedDatabase(): Promise<void> {
     Buffer.from(p3, 'utf-8'), p3, now,
     Buffer.from(p4, 'utf-8'), p4, now
   ]);
+
+  console.log('[SEED] Inserting Phase 3 Quality Rules & Multi-Up PCB CAD Coordinates...');
+  await db.execute(`
+    INSERT INTO quality_rules (
+      id, product_id, program_id, consecutive_failure_limit,
+      sliding_window_failures, sliding_window_panels, default_max_rework_cycles
+    ) VALUES
+      ('qr-sm-01', 'PRD-SM-4G-V2', 'PROG-SM-METER-TOP-REV4', 3, 5, 20, 2)
+  `);
+
+  // 6-up PCB Panel CAD definitions for PROG-SM-METER-TOP-REV4
+  for (let u = 1; u <= 6; u++) {
+    const xOffset = (u - 1) * 45.0;
+    await db.execute(`
+      INSERT INTO pcb_cad_definitions (
+        id, product_id, product_revision, program_id, program_revision,
+        board_side, cad_revision, ref_des, unit_position,
+        x_mm, y_mm, rotation_deg, package_type, assigned_part_number, max_rework_cycles
+      ) VALUES
+        (?, 'PRD-SM-4G-V2', 1, 'PROG-SM-METER-TOP-REV4', 4, 'TOP', 'REV_1', 'C12', ?, ?, 18.200, 90.0, '0402', 'C0402-100NF-16V', 2),
+        (?, 'PRD-SM-4G-V2', 1, 'PROG-SM-METER-TOP-REV4', 4, 'TOP', 'REV_1', 'C14', ?, ?, 18.200, 90.0, '0402', 'C0402-100NF-16V', 2),
+        (?, 'PRD-SM-4G-V2', 1, 'PROG-SM-METER-TOP-REV4', 4, 'TOP', 'REV_1', 'R104', ?, ?, 25.400, 0.0, '0402', 'R0402-10K-1%', 2),
+        (?, 'PRD-SM-4G-V2', 1, 'PROG-SM-METER-TOP-REV4', 4, 'TOP', 'REV_1', 'U3', ?, ?, 32.500, 0.0, 'QFN-16', 'IC-TPS62130-QFN16', 1),
+        (?, 'PRD-SM-4G-V2', 1, 'PROG-SM-METER-TOP-REV4', 4, 'TOP', 'REV_1', 'MOD1', ?, ?, 50.000, 0.0, 'LGA-144', 'MOD-QUECTEL-EC200U', 1)
+    `, [
+      `cad-u${u}-c12`, u, xOffset + 12.5,
+      `cad-u${u}-c14`, u, xOffset + 14.8,
+      `cad-u${u}-r104`, u, xOffset + 22.1,
+      `cad-u${u}-u3`, u, xOffset + 30.0,
+      `cad-u${u}-mod1`, u, xOffset + 35.0
+    ]);
+  }
+
+  console.log('[SEED] Inserting Multi-Up Panel & Baseline AOI Inspection Hold...');
+  const demoPanel = 'PNL-260901-0042';
+  for (let u = 1; u <= 6; u++) {
+    const status = u === 3 ? 'QUALITY_HOLD' : 'PASSED';
+    await db.execute(`
+      INSERT INTO panel_units (id, panel_barcode, unit_position, unit_serial_number, status)
+      VALUES (?, ?, ?, ?, ?)
+    `, [`pnl-unit-0042-${u}`, demoPanel, u, `SN-MTR-0042-U${u}`, status]);
+  }
+
+  // Baseline 3D AOI Inspection record with Unit 3 Defect (C12 Tombstone)
+  await db.execute(`
+    INSERT INTO aoi_inspections (
+      id, source_system, source_inspection_id, source_file_hash,
+      panel_barcode, batch_id, work_center_id, optical_machine_id,
+      inspection_phase, result, total_defects, duration_seconds, inspected_at
+    ) VALUES (
+      'aoi-insp-demo-01', 'KOH_YOUNG_3D_AOI', 'KY-20260907-0042', 'hash-ky-0042-seed',
+      ?, 'job-01', 'wc-aoi-01', 'KY-ZENITH-01',
+      'POST_REFLOW', 'FAILED', 1, 14.20, ?
+    )
+  `, [demoPanel, now]);
+
+  await db.execute(`
+    INSERT INTO aoi_defects (
+      id, inspection_id, panel_barcode, unit_position, ref_des,
+      defect_category, defect_type, defect_signature,
+      offset_x_um, offset_y_um, rotation_deg, board_side, status, image_ref
+    ) VALUES (
+      'defect-demo-01', 'aoi-insp-demo-01', ?, 3, 'C12',
+      'SOLDER', 'TOMBSTONE', 'PROG-SM-METER-TOP-REV4:wc-aoi-01:KY-ZENITH-01:C12:TOMBSTONE',
+      45.20, 180.50, 28.50, 'TOP', 'OPEN', 'img/aoi/ky-zenith-01/pnl-0042-u3-c12.png'
+    )
+  `, [demoPanel]);
 
   console.log('[SEED] Dixon SMT Line 01 successfully populated with authentic high-speed SMT data.');
 }

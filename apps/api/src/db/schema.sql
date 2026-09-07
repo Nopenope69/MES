@@ -498,3 +498,121 @@ CREATE TABLE IF NOT EXISTS device_history_records (
 CREATE INDEX IF NOT EXISTS idx_dhr_batch ON device_history_records(batch_id);
 CREATE INDEX IF NOT EXISTS idx_dhr_product ON device_history_records(product_code);
 
+-- ============================================================================
+-- PHASE 3: Closed-Loop 3D AOI, Quality Execution & Rework Engine
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS quality_rules (
+  id VARCHAR(64) PRIMARY KEY,
+  product_id VARCHAR(64),
+  program_id VARCHAR(64),
+  consecutive_failure_limit INTEGER NOT NULL DEFAULT 3,
+  sliding_window_failures INTEGER NOT NULL DEFAULT 5,
+  sliding_window_panels INTEGER NOT NULL DEFAULT 20,
+  default_max_rework_cycles INTEGER NOT NULL DEFAULT 2,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pcb_cad_definitions (
+  id VARCHAR(64) PRIMARY KEY,
+  product_id VARCHAR(64) NOT NULL,
+  product_revision INTEGER NOT NULL DEFAULT 1,
+  program_id VARCHAR(64) NOT NULL,
+  program_revision INTEGER NOT NULL DEFAULT 1,
+  board_side VARCHAR(16) NOT NULL DEFAULT 'TOP',
+  cad_revision VARCHAR(32) NOT NULL DEFAULT 'REV_1',
+  ref_des VARCHAR(32) NOT NULL,
+  unit_position INTEGER NOT NULL DEFAULT 1,
+  x_mm DECIMAL(8, 3) NOT NULL,
+  y_mm DECIMAL(8, 3) NOT NULL,
+  rotation_deg DECIMAL(6, 2) NOT NULL DEFAULT 0.0,
+  package_type VARCHAR(32) NOT NULL DEFAULT '0402',
+  assigned_part_number VARCHAR(64) NOT NULL,
+  max_rework_cycles INTEGER NOT NULL DEFAULT 2
+);
+
+CREATE INDEX IF NOT EXISTS idx_cad_program ON pcb_cad_definitions(program_id, program_revision, board_side);
+
+CREATE TABLE IF NOT EXISTS panel_units (
+  id VARCHAR(64) PRIMARY KEY,
+  panel_barcode VARCHAR(64) NOT NULL,
+  unit_position INTEGER NOT NULL,
+  unit_serial_number VARCHAR(64),
+  status VARCHAR(32) NOT NULL DEFAULT 'PASSED',
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(panel_barcode, unit_position)
+);
+
+CREATE TABLE IF NOT EXISTS aoi_inspections (
+  id VARCHAR(64) PRIMARY KEY,
+  source_system VARCHAR(64) NOT NULL,
+  source_inspection_id VARCHAR(128) NOT NULL,
+  source_file_hash VARCHAR(64) NOT NULL,
+  panel_barcode VARCHAR(64) NOT NULL,
+  batch_id VARCHAR(64),
+  work_center_id VARCHAR(64) NOT NULL,
+  optical_machine_id VARCHAR(64) NOT NULL,
+  inspection_phase VARCHAR(32) NOT NULL DEFAULT 'POST_REFLOW',
+  result VARCHAR(16) NOT NULL,
+  total_defects INTEGER NOT NULL DEFAULT 0,
+  duration_seconds DECIMAL(8, 2),
+  inspected_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source_system, source_inspection_id, source_file_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_aoi_panel ON aoi_inspections(panel_barcode);
+
+CREATE TABLE IF NOT EXISTS aoi_defects (
+  id VARCHAR(64) PRIMARY KEY,
+  inspection_id VARCHAR(64) NOT NULL,
+  panel_barcode VARCHAR(64) NOT NULL,
+  unit_position INTEGER NOT NULL DEFAULT 1,
+  ref_des VARCHAR(32) NOT NULL,
+  defect_category VARCHAR(32) NOT NULL,
+  defect_type VARCHAR(64) NOT NULL,
+  defect_signature VARCHAR(256) NOT NULL,
+  offset_x_um DECIMAL(8, 2),
+  offset_y_um DECIMAL(8, 2),
+  rotation_deg DECIMAL(6, 2),
+  board_side VARCHAR(16) NOT NULL DEFAULT 'TOP',
+  status VARCHAR(32) NOT NULL DEFAULT 'OPEN',
+  image_ref VARCHAR(256),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_defects_panel ON aoi_defects(panel_barcode, unit_position);
+CREATE INDEX IF NOT EXISTS idx_defects_signature ON aoi_defects(defect_signature);
+
+CREATE TABLE IF NOT EXISTS rework_dispositions (
+  id VARCHAR(64) PRIMARY KEY,
+  defect_id VARCHAR(64) NOT NULL,
+  panel_barcode VARCHAR(64) NOT NULL,
+  unit_position INTEGER NOT NULL DEFAULT 1,
+  disposition VARCHAR(32) NOT NULL,
+  reason TEXT NOT NULL,
+  authorized_by VARCHAR(64) NOT NULL,
+  disposition_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rework_events (
+  id VARCHAR(64) PRIMARY KEY,
+  defect_id VARCHAR(64) NOT NULL,
+  panel_barcode VARCHAR(64) NOT NULL,
+  unit_position INTEGER NOT NULL DEFAULT 1,
+  ref_des VARCHAR(32) NOT NULL,
+  technician_id VARCHAR(64) NOT NULL,
+  station_id VARCHAR(64) NOT NULL DEFAULT 'STATION-REWORK-01',
+  old_mpn VARCHAR(64) NOT NULL,
+  old_reel_id VARCHAR(64),
+  replacement_mpn VARCHAR(64) NOT NULL,
+  replacement_reel_id VARCHAR(64) NOT NULL,
+  rework_method VARCHAR(64) NOT NULL DEFAULT 'HOT_AIR_DESOLDER_SOLDERING_IRON',
+  temperature_profile_id VARCHAR(64),
+  rework_cycle INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rework_panel ON rework_events(panel_barcode, ref_des);
+
+

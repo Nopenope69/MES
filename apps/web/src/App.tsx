@@ -10,8 +10,10 @@ import { GenealogyExplorer } from './components/GenealogyExplorer';
 import { AuditTrailViewer } from './components/AuditTrailViewer';
 import { CleanroomComplianceStation } from './components/CleanroomComplianceStation';
 import { AndonTower } from './components/AndonTower';
+import { ReworkStation } from './components/ReworkStation';
+import { Crosshair } from 'lucide-react';
 
-type NavTab = 'SOLDER_PASTE' | 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL' | 'COMPLIANCE';
+type NavTab = 'SOLDER_PASTE' | 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL' | 'COMPLIANCE' | 'REWORK';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('OPERATOR');
@@ -134,6 +136,18 @@ export const App: React.FC = () => {
               <Shield className="w-3.5 h-3.5" />
               <span>05 // eDHR & AUDIT</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('REWORK')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                activeTab === 'REWORK' 
+                  ? 'bg-[#1D2735] text-red-400 font-bold border border-red-500/40 shadow-sm' 
+                  : 'text-[#7A8A9E] hover:text-white'
+              }`}
+            >
+              <Crosshair className="w-3.5 h-3.5" />
+              <span>06 // REWORK KIOSK</span>
+            </button>
           </nav>
         </div>
       </header>
@@ -153,6 +167,7 @@ export const App: React.FC = () => {
         {activeTab === 'GENEALOGY' && <GenealogyExplorer />}
         {activeTab === 'AUDIT_TRAIL' && <AuditTrailViewer />}
         {activeTab === 'COMPLIANCE' && <CleanroomComplianceStation />}
+        {activeTab === 'REWORK' && <ReworkStation />}
       </main>
 
       {/* Micro-Telemetry Bottom HUD */}
