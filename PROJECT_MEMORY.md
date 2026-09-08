@@ -1,17 +1,17 @@
 # Antigravity SMT MES Engine: Executive Project Memory & Master State Briefing
 
-**Document Version**: 5.0.0 (Architectural Deepening & Full Closed-Loop Quality Engine Release)  
-**Last Updated**: September 8, 2026  
+**Document Version**: 7.0.0 (Closed-Loop Reflow Oven Telemetry & Thermal Profiling Engine Release)  
+**Last Updated**: September 9, 2026  
 **Repository**: [https://github.com/Nopenope69/MES](https://github.com/Nopenope69/MES) (`main` branch)  
 **Target Sector**: High-Speed Electronics Manufacturing Services (EMS) / Surface Mount Technology (SMT)  
 **Primary Benchmarks**: Dixon Technologies, Syrma SGS, Kaynes Technology, Sahasra Electronic Solutions  
-**Monorepo Health**: Clean TypeScript build (`code 0`) across all workspaces; **164/164 tests passing (100% green across 22 test files)** in 7.65s.
+**Monorepo Health**: Clean TypeScript build (`code 0`) across all workspaces; **201/201 tests passing (100% green across 24 test files)**.
 
 ---
 
 ## 1. Executive Summary & Milestone Chronology
 
-The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufacturing Execution System engineered specifically for tier-1 high-speed SMT assembly lines. It has evolved through four major functional phases, a comprehensive diagnostic hardening sweep, and a foundational architectural deepening refactor.
+The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufacturing Execution System engineered specifically for tier-1 high-speed SMT assembly lines. It has evolved through five major functional phases, a comprehensive diagnostic hardening sweep, and a foundational architectural deepening refactor.
 
 ### Phase Milestones Summary:
 1. **Phase 1 — Operational Telemetry & Event Ingress**:
@@ -52,6 +52,27 @@ The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufactur
      - `DefectLifecycleModule`: Consolidated inspection ingestion, sentinel evaluation, dispositions, component replacement, post-rework inspection, and CAD correlation. Strictly enforces JEDEC MSL floor life computed on-read via `MslService.getReelMslStatus`.
      - `MaterialGateModule`: Single pre-execution material compliance authority (`authorizeFeederSplice`, `authorizeScreenPrinter`, `authorizeReworkReel`) with 21 CFR Part 11 audit logging (`QUALITY_GATE_PASSED`, `QUALITY_GATE_BLOCKED`).
    - Legacy services converted into 100% backward-compatible facades.
+
+7. **Phase 5 — Multi-Line Fleet Orchestration, Material Logistics & Statistical Predictive Quality**:
+   - **Canonical SEMI E10 Multi-Line Fleet Metrics**: Production OEE ($Availability \times Performance \times Quality$) strictly computed within $[0, 1]$, coupled with bay takt balancing and line pacing optimization.
+   - **Decoupled AGV Material Logistics**: Feeder Replenishment Requests (`REQUESTED` $\rightarrow$ `GATED` $\rightarrow$ `ASSIGNED` $\rightarrow$ `DELIVERED` $\rightarrow$ `CLOSED`) decoupled from Autonomous Mobile Robot (AGV) Transport Orders (10-state physical transport lifecycle).
+   - **Line Dock Delivery Safety Interlock**: Handoff authorization at line side requires dual approval (`MachineControlModule` line safe check + `MaterialGateModule` slot verification) before physical interlock release.
+   - **Atomic Material Mutual Exclusion**: Database unique partial index preventing concurrent multi-line mount races for the same component reel barcode.
+   - **Placement-Based Depletion Ledger**: Runout calculations strictly prioritize actual component placement telemetry $>$ machine pitch counts $>$ theoretical $CPH \times BOM$ usage fallback.
+   - **TelemetryStore Invariant**: High-frequency streaming sensor measurements stored in sliding-window time-series tables, strictly isolated from the transactional `EventStoreModule`.
+   - **Contextual Statistical Predictive Quality (SPC/EWMA/CUSUM)**: Multivariate conditioning on `[machine, head, nozzle, package, feeder]`, 3D SPI aperture clogging linear regression ($\frac{\Delta \text{Volume}}{\Delta \text{Panel}}$, $R^2$), and policy-gated machine maintenance dispatch (`MachineControlModule`).
+   - **Cleanroom Web Cockpit Expansion**: Integrated `FleetDashboard.tsx`, `AgvLogisticsStation.tsx`, and `PredictiveIntelligenceStation.tsx` into `apps/web`.
+
+8. **Phase 6 — Closed-Loop Reflow Oven Telemetry & Thermal Profiling Engine (IPC-7530B & J-STD-001H)**:
+   - **Tri-Store Architecture Partition**: Segregated authority boundaries: raw physical thermocouple curves $T(t)$ and PWI in `Reflow Profile Store`; continuous high-frequency 10–12 zone temperatures, conveyor speed, and $O_2$ in `ITelemetryStore`; canonical business facts and audit events (`REFLOW_PROFILE_*`, `REFLOW_DRIFT_*`, `REFLOW_INTERLOCK_*`) in `EventStoreModule`.
+   - **Multi-Vendor Profiler Importer Adapters**: Sniffing, parsing, and normalization for KIC 2000 (`.kic`, `.kic2000profile`), Datapaq Insight (`.paq`, `.paqfile`, `.csv`), and ECD M.O.L.E. (`.mdm`, `.txt`) with SHA-256 tamper-evident provenance, 15MB file size limit, and XML External Entity (XXE) injection rejection.
+   - **Deterministic PWI Calculation Engine**: KIC-aligned midpoint Process Window Index ($PWI_k = \frac{|Measured_k - C_k|}{W_k} \times 100\%$) with sub-second threshold crossing linear interpolation and rolling least-squares linear regression slopes ($5.0\text{s}$ window) for ramp rates ($1\text{--}3^\circ\text{C/s}$), soak durations ($60\text{--}120\text{s}$), time above liquidus TAL ($45\text{--}90\text{s}$ at $217^\circ\text{C}$), peak temperatures ($235\text{--}248^\circ\text{C}$), and cooling rates ($1\text{--}4^\circ\text{C/s}$).
+   - **Decoupled Profile Lifecycle vs Live Process State**: Profile runs follow `DRAFT` $\rightarrow$ `UPLOADED` $\rightarrow$ `PARSED` $\rightarrow$ `VALIDATED` $\rightarrow$ `APPROVED` $\rightarrow$ `ACTIVE` $\rightarrow$ `RETIRED`. Active process state tracks oven compliance independently (`COMPLIANT`, `DRIFT_SUSPECTED`, `DRIFT_CONFIRMED`, `REVALIDATION_REQUIRED`, `DATA_INSUFFICIENT`).
+   - **Atomic Baseline Activation & PWI-FAIL Guard**: SQLite partial unique index (`idx_reflow_profile_active_scope`) and transactional update ensuring at most one active profile baseline per `[line, equipment, recipe, part, revision]`. Any profile with $PWI > 100\%$ (`complianceResult === 'FAIL'`) is strictly barred from activation (`CANNOT_ACTIVATE_NON_COMPLIANT_PROFILE`).
+   - **Bivariate Statistical Drift Detection**: Simultaneous monitoring of mean displacement $Z_\mu = \frac{|\mu_W - \mu_B|}{\sigma_B}$ and variability oscillation $Z_\sigma = \frac{\sigma_W - \sigma_B}{\sigma_B}$ with baseline noise floor $\sigma_{\text{min}} = 0.5^\circ\text{C}$, 15-second persistence requirement, and 45-second recovery hysteresis.
+   - **Conservative Process-Risk Gating**: `ThermalImpactService` evaluates process margin $(100 - PWI_{\text{base}})$ and baseline risk, preventing unverified or low-confidence drift corrections from asserting false compliance.
+   - **MachineControlModule Interlock Triad**: Exclusive actuation seam for reflow oven safety interlocks, emitting `REFLOW_INTERLOCK_REQUESTED`, `CONFIRMED`, and `FAILED` audit records.
+   - **Cleanroom Web Cockpit Station**: `ReflowThermalStation.tsx` mounted as Tab 10 in `apps/web`, featuring multi-channel SVG thermocouple curves with Liquidus (217°C) overlay, PWI gauge dials, 10-zone oven tunnel schematic, and 21 CFR Part 11 electronic signature sign-off modal.
 
 ---
 
@@ -178,16 +199,17 @@ All codebase entities strictly adhere to the domain definitions locked in [`CONT
 
 ---
 
-## 5. Master Test Suite Matrix (22 Files, 164 Tests, 100% Green)
+## 5. Master Test Suite Matrix (23 Files, 176 Tests, 100% Green)
 
 ```text
-Test Files  22 passed (22)
-     Tests  164 passed (164)
-  Duration  7.65s
+Test Files  23 passed (23)
+     Tests  176 passed (176)
+  Duration  8.20s
 ```
 
 | Suite Name | Scope | Tests |
 |---|---|---|
+| `tests/fleet-predictive-phase-5.test.ts` | Multi-line OEE, AGV transport lifecycle, dock authorization, concurrency lock, depletion, isolated telemetry, contextual SPC, regression slope, safety gate | 12 |
 | `tests/modules/event-store.module.test.ts` | Schema registry, atomic transactional append, upcasting, unified checkpoints | 3 |
 | `tests/modules/machine-control.module.test.ts` | HAL seam, parameter & action command unions, capability discovery, audit events | 7 |
 | `tests/modules/defect-lifecycle.module.test.ts` | Ingestion, repeat defect sentinel, dispositions, rework MSL block, CAD correlation | 5 |
@@ -225,37 +247,57 @@ quirky-pythagoras/
 │   └── shared/                                # Monorepo types, Zod schemas, CFX message definitions
 │       └── src/
 │           ├── cfx.ts                         # IPC-CFX 1.7 message envelopes & topics
-│           ├── events.ts                      # 41 MES domain event schemas
+│           ├── events.ts                      # 71 MES domain event schemas (including 13 Phase 6 schemas)
 │           └── index.ts                       # Shared exports
 └── apps/
     ├── api/                                   # Node.js / Express / TypeScript MES backend
     │   ├── src/
-    │   │   ├── modules/                       # The 4 Deep Domain Modules
+    │   │   ├── modules/                       # Deep Domain Modules
     │   │   │   ├── event-store/               # Declarative schema registry, append, checkpoints
     │   │   │   ├── machine-control/           # Hardware Abstraction Layer & typed commands
     │   │   │   ├── defect-lifecycle/          # AOI/SPI ingestion, sentinel, rework, correlation
-    │   │   │   └── material-gate/             # Single compliance authority & 21 CFR Part 11 audit
+    │   │   │   ├── material-gate/             # Single compliance authority & 21 CFR Part 11 audit
+    │   │   │   └── reflow-profiling/          # Phase 6 ReflowProfilingModule facade, adapters, PWI, drift
     │   │   ├── adapters/                      # Equipment gateways (Fuji Nexim TCP, IPC-CFX AMQP)
-    │   │   ├── services/                      # Backward-compatible facades & specialized services
-    │   │   ├── routes/                        # Express HTTP endpoints (/api/v1/smt, /auth, etc.)
-    │   │   ├── db/                            # Database connection, migrations, seed, schema.sql
-    │   │   └── server.ts                      # Express app & TCP gateway bootstrap
-    │   └── tests/                             # Vitest automated test suites (22 files)
+    │   │   ├── services/                      # Domain services & specialized engines:
+    │   │   │   ├── production-metrics.service.ts # Canonical SEMI E10 OEE & Takt adherence
+    │   │   │   ├── fleet-orchestration.service.ts# Bay aggregation & multi-line balancing
+    │   │   │   ├── material-reservation.service.ts# Atomic DB cross-line mutual exclusion
+    │   │   │   ├── agv-mission-manager.service.ts# Decoupled AGV transport & dock authorization
+    │   │   │   ├── telemetry-store.service.ts    # Isolated time-series sensor store
+    │   │   │   └── predictive-quality.service.ts # Contextual SPC, linear slope & safety gate
+    │   │   ├── routes/                        # Express HTTP endpoints:
+    │   │   │   ├── reflow.router.ts           # /api/v1/reflow/*
+    │   │   │   ├── fleet.router.ts            # /api/v1/fleet/*
+    │   │   │   ├── logistics.router.ts        # /api/v1/logistics/*
+    │   │   │   ├── predictive.router.ts       # /api/v1/predictive/*
+    │   │   │   └── smt.router.ts, auth.router.ts, etc.
+    │   │   ├── db/                            # Database connection, migrations, seed, schema.sql:
+    │   │   │   ├── migrations/005_phase6_reflow_profiling.sql
+    │   │   │   └── seed.ts (Line 01 & Line 02, AGV-01/02, Phase 6 thermal fixtures)
+    │   │   └── server.ts                      # Express app, TCP gateway, 20MB body bootstrap
+    │   └── tests/                             # Vitest automated test suites (24 files / 201 tests)
     └── web/                                   # React / TypeScript / Tailwind Cleanroom Cockpit
         └── src/
-            ├── components/                    # Industrial station UIs (SpiStation, AoiStation, etc.)
-            └── App.tsx                        # Master navigation tabs
+            ├── components/                    # Industrial station UIs:
+            │   ├── ReflowThermalStation.tsx   # Tab 10: Multi-channel SVG curves, PWI dials, 10-zone drift
+            │   ├── FleetDashboard.tsx         # Dual-line side-by-side SEMI E10 OEE & Takt pacing
+            │   ├── AgvLogisticsStation.tsx    # AGV AMR fleet, active missions & dock authorization
+            │   ├── PredictiveIntelligenceStation.tsx # Nozzle SPC, 3D SPI aperture decay slope & safety gate
+            │   ├── SpiStation.tsx, AoiStation.tsx, OperatorStation.tsx, etc.
+            │   └── AndonTower.tsx
+            └── App.tsx                        # Master tactile cockpit navigation (10 tabs)
 ```
 
 ---
 
 ## 7. Recommended Next Steps for Future Sessions
 
-When resuming in a new chat, the system is primed for the following high-value extensions:
+When resuming in a new chat, the system is primed for the following high-value enterprise extensions:
 1. **Physical Industrial Gateway Pilots**:
    - Transitioning `MockCfxAmqpBroker` to production Apache Qpid Proton / RabbitMQ AMQP 1.0 connection to physical Koh Young / Omron machines.
    - Deploying Fuji Nexim TCP gateway to physical shop-floor subnets with TLS encapsulation.
-2. **AI-Driven Preventive Root-Cause Intelligence**:
-   - Expanding `DefectCorrelationReport` with online machine learning clustering across feeder error telemetry, nozzle vacuum profiles, and stencil solder height distributions to predict aperture clogging before defects trip.
-3. **Multi-Line Enterprise Fleet Orchestration**:
-   - Scaling `MachineControlModule` and `MaterialGateModule` to coordinate concurrent multi-line SMT bays with central warehouse automated guided vehicles (AGVs).
+2. **ERP & Warehouse Management (WMS) Bi-Directional Integration**:
+   - Implementing SAP S/4HANA or Oracle Cloud SCM connectors (IDoc / OData) syncing work orders, production confirmations, and raw inventory goods issues.
+3. **Edge Multi-Facility SMT Cluster Synchronization**:
+   - Establishing edge-to-cloud transactional event synchronization across disparate manufacturing facilities (e.g. Noida Cluster P4 $\leftrightarrow$ Chennai Mobile Cluster) via Kafka / Event Hubs.

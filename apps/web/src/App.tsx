@@ -12,12 +12,16 @@ import { CleanroomComplianceStation } from './components/CleanroomComplianceStat
 import { AndonTower } from './components/AndonTower';
 import { ReworkStation } from './components/ReworkStation';
 import { SpiStation } from './components/SpiStation';
-import { Crosshair } from 'lucide-react';
+import { FleetDashboard } from './components/FleetDashboard';
+import { AgvLogisticsStation } from './components/AgvLogisticsStation';
+import { PredictiveIntelligenceStation } from './components/PredictiveIntelligenceStation';
+import { ReflowThermalStation } from './components/ReflowThermalStation';
+import { Crosshair, Truck, Split, Flame } from 'lucide-react';
 
-type NavTab = 'SPI' | 'SOLDER_PASTE' | 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL' | 'COMPLIANCE' | 'REWORK';
+type NavTab = 'FLEET' | 'AGV_LOGISTICS' | 'PREDICTIVE' | 'REFLOW' | 'SPI' | 'SOLDER_PASTE' | 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL' | 'COMPLIANCE' | 'REWORK';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<NavTab>('OPERATOR');
+  const [activeTab, setActiveTab] = useState<NavTab>('REFLOW');
 
   return (
     <div className="min-h-screen bg-[#0B0F14] bg-pcb-grid text-[#F0F4F8] flex flex-col font-sans">
@@ -161,6 +165,54 @@ export const App: React.FC = () => {
               <Crosshair className="w-3.5 h-3.5" />
               <span>06 // REWORK KIOSK</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('FLEET')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                activeTab === 'FLEET' 
+                  ? 'bg-[#1D2735] text-[#00E699] font-bold border border-[#00E699]/40 shadow-sm' 
+                  : 'text-[#7A8A9E] hover:text-white'
+              }`}
+            >
+              <Split className="w-3.5 h-3.5" />
+              <span>07 // FLEET OEE</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('AGV_LOGISTICS')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                activeTab === 'AGV_LOGISTICS' 
+                  ? 'bg-[#1D2735] text-[#00E699] font-bold border border-[#00E699]/40 shadow-sm' 
+                  : 'text-[#7A8A9E] hover:text-white'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span>08 // AGV FLEET</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('PREDICTIVE')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                activeTab === 'PREDICTIVE' 
+                  ? 'bg-[#1D2735] text-[#38BDF8] font-bold border border-[#38BDF8]/40 shadow-sm' 
+                  : 'text-[#7A8A9E] hover:text-white'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>09 // PREDICTIVE SPC</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('REFLOW')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                activeTab === 'REFLOW' 
+                  ? 'bg-[#1D2735] text-orange-400 font-bold border border-orange-500/40 shadow-sm' 
+                  : 'text-[#7A8A9E] hover:text-white'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5" />
+              <span>10 // REFLOW PROFILE</span>
+            </button>
           </nav>
         </div>
       </header>
@@ -174,6 +226,10 @@ export const App: React.FC = () => {
 
       {/* Main Instrument Display Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        {activeTab === 'REFLOW' && <ReflowThermalStation />}
+        {activeTab === 'FLEET' && <FleetDashboard />}
+        {activeTab === 'AGV_LOGISTICS' && <AgvLogisticsStation />}
+        {activeTab === 'PREDICTIVE' && <PredictiveIntelligenceStation />}
         {activeTab === 'SPI' && <SpiStation />}
         {activeTab === 'SOLDER_PASTE' && <SolderPasteStation />}
         {activeTab === 'OPERATOR' && <OperatorStation />}
