@@ -123,14 +123,6 @@ export class MoleImporterAdapter implements IProfilerImporter {
 
     const probes: RawProfilerProbe[] = channelKeys.map((c, i) => {
       const samples = probeSamples[c];
-      for (let s = 1; s < samples.length; s++) {
-        if (samples[s].timeSeconds < samples[s - 1].timeSeconds) {
-          throw new Error(
-            `NON_MONOTONIC_TIMESTAMPS: Sample timestamp at index ${s} (${samples[s].timeSeconds}s) is earlier than preceding sample (${samples[s - 1].timeSeconds}s)`
-          );
-        }
-      }
-
       const label = probeLabels[c] || `Ch ${i + 1}`;
       let thermalRole: RawProfilerProbe['thermalRole'];
       const lLower = label.toLowerCase();

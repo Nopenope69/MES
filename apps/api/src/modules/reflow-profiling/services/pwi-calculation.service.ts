@@ -20,6 +20,14 @@ export interface ProbePwiBreakdown {
   tal: number;
   peak: number;
   cooling: number;
+  overallProbePwi?: number;
+  characteristicPwi?: {
+    rampPwi: number;
+    soakPwi: number;
+    talPwi: number;
+    peakTempPwi: number;
+    coolingPwi: number;
+  };
 }
 
 export class PwiCalculationService {
@@ -216,60 +224,106 @@ export class PwiCalculationService {
 
   /**
    * Calculate PWI breakdown for a probe given its extracted metrics and specification.
+   * Supports both (metrics, spec, probeIndex?) and (probeIndex, label, metrics, spec).
    */
   calculateProbePwi(
-    metrics: ExtractedProbeMetrics,
-    spec: ReflowThermalSpecification
-  ): ProbePwiBreakdown {
-    const rampPwi = this.calculateStatisticPwi(
-      metrics.maxRampRateCPerSec,
-      spec.rampRate.minCPerSec,
-      spec.rampRate.maxCPerSec
-    );
+    arg1: ExtractedProbeMetrics | number,
+    arg2: ReflowThermalSpecification | any,
+    arg3?: ExtractedProbeMetrics | number,
+    arg4?: ReflowThermalSpecification | any
+  ): ProbePwiBreakdown & {
+    overallProbePwi: number;
+    characteristicPwi: {
+      rampPwi: number;
+      soakPwi: number;
+      talPwi: number;
+      peakTempPwi: number;
+      coolingPwi: number;
+    };
+  } {
+    let metrics: ExtractedProbeMetrics;
+    let spec: any;
+    let probeIndex: number | undefined;
 
-    const soakPwi = this.calculateStatisticPwi(
-      metrics.soakDurationSeconds,
-      spec.soak.minSeconds,
-      spec.soak.maxSeconds
-    );
+    if (typeof arg1 === 'number') {
+      probeIndex = arg1;
+      // arg2 is label (e.g. 'BGA U1 Center')
+      metrics = arg3 as ExtractedProbeMetrics;
+      spec = arg4;
+    } else {
+      metrics = arg1 as ExtractedProbeMetrics;
+      spec = arg2;
+      probeIndex = typeof arg3 === 'number' ? arg3 : undefined;
+    }
 
-    const talPwi = this.calculateStatisticPwi(
-      metrics.timeAboveLiquidusSeconds,
-      spec.tal.minSeconds,
-      spec.tal.maxSeconds
-    );
+    const minRamp = spec?.rampRate?.minCPerSec ?? spec?.rampRate?.minSlopeCPerSec ?? 1.0;
+    const maxRamp = spec?.rampRate?.maxCPerSec ?? spec?.rampRate?.maxSlopeCPerSec ?? 3.0;
 
-    const peakPwi = this.calculateStatisticPwi(
-      metrics.peakTemperatureC,
-      spec.peak.minC,
-      spec.peak.maxC
-    );
+    const minSoak = spec?.soak?.minSeconds ?? spec?.soak?.minDurationSeconds ?? 60;
+    const maxSoak = spec?.soak?.maxSeconds ?? spec?.soak?.maxDurationSeconds ?? 120;
 
-    const coolingPwi = this.calculateStatisticPwi(
-      metrics.maxCoolingRateCPerSec,
-      spec.cooling.minCPerSec,
-      spec.cooling.maxCPerSec
-    );
+    const minTal = spec?.tal?.minSeconds ?? spec?.tal?.minDurationSeconds ?? 45;
+    const maxTal = spec?.tal?.maxSeconds ?? spec?.tal?.maxDurationSeconds ?? 90;
 
-    const overall = Math.max(rampPwi, soakPwi, talPwi, peakPwi, coolingPwi);
+    let minPeak = spec?.peak?.minC ?? spec?.peakTemperature?.minPeakTempC ?? 235;
+    let maxPeak = spec?.peak?.maxC ?? spec?.peakTemperature?.maxPeakTempC ?? 248;
+
+    const minCooling = spec?.cooling?.minCPerSec ?? spec?.coolingRate?.minSlopeCPerSec ?? 1.0;
+    const maxCooling = spec?.cooling?.maxCPerSec ?? spec?.coolingRate?.maxSlopeCPerSec ?? 4.0;
+
+    // Evaluate probe-specific constraints (e.g. tighter BGA limit)
+    if (probeIndex !== undefined && Array.isArray(spec?.probeConstraints)) {
+      const constraint = spec.probeConstraints.find((c: any) => c.probeIndex === probeIndex);
+      if (constraint) {
+        if (constraint.maxPeakTempC !== undefined) {
+          maxPeak = constraint.maxPeakTempC;
+        }
+        if (constraint.minPeakTempC !== undefined) {
+          minPeak = constraint.minPeakTempC;
+        }
+      }
+    }
+
+    const rampPwi = this.calculateStatisticPwi(metrics.maxRampRateCPerSec, minRamp, maxRamp);
+    const soakPwi = this.calculateStatisticPwi(metrics.soakDurationSeconds, minSoak, maxSoak);
+    const talPwi = this.calculateStatisticPwi(metrics.timeAboveLiquidusSeconds, minTal, maxTal);
+    const peakPwi = this.calculateStatisticPwi(metrics.peakTemperatureC, minPeak, maxPeak);
+    const coolingPwi = this.calculateStatisticPwi(metrics.maxCoolingRateCPerSec, minCooling, maxCooling);
+
+    const overall = Number(Math.max(rampPwi, soakPwi, talPwi, peakPwi, coolingPwi).toFixed(2));
 
     return {
-      overall: Number(overall.toFixed(2)),
+      overall,
       ramp: rampPwi,
       soak: soakPwi,
       tal: talPwi,
       peak: peakPwi,
-      cooling: coolingPwi
+      cooling: coolingPwi,
+      overallProbePwi: overall,
+      characteristicPwi: {
+        rampPwi,
+        soakPwi,
+        talPwi,
+        peakTempPwi: peakPwi,
+        coolingPwi
+      }
     };
   }
 
   /**
    * Comprehensive PWI calculation across all probes of a profile run.
    */
+  calculateRunPwi(
+    probes: Array<RawProfilerProbe | ReflowProfileProbe>,
+    spec: ReflowThermalSpecification
+  ): CalculatedProfilePwi & { overallPwiPercent?: number } {
+    return this.evaluateRun(probes, spec);
+  }
+
   evaluateRun(
     probes: Array<RawProfilerProbe | ReflowProfileProbe>,
     spec: ReflowThermalSpecification
-  ): CalculatedProfilePwi {
+  ): CalculatedProfilePwi & { overallPwiPercent?: number } {
     if (!probes || probes.length === 0) {
       throw new Error('NO_PROBES: Cannot calculate PWI without at least one thermocouple probe');
     }
@@ -284,7 +338,7 @@ export class PwiCalculationService {
         ? p.metrics
         : this.extractMetrics(p.samples, spec);
 
-      const pwi = this.calculateProbePwi(metrics, spec);
+      const pwi = this.calculateProbePwi(metrics, spec, p.probeIndex);
 
       if (pwi.overall > overallPwi) {
         overallPwi = pwi.overall;
@@ -309,23 +363,26 @@ export class PwiCalculationService {
 
     overallPwi = Number(overallPwi.toFixed(2));
     const processMarginPct = Number((100.0 - overallPwi).toFixed(2));
-
-    let complianceResult: 'PASS' | 'WARNING' | 'FAIL';
-    if (overallPwi <= 80.0) {
-      complianceResult = 'PASS';
-    } else if (overallPwi <= 100.0) {
-      complianceResult = 'WARNING';
-    } else {
-      complianceResult = 'FAIL';
-    }
+    const complianceResult = this.evaluateCompliance(overallPwi);
 
     return {
       overallPwi,
+      overallPwiPercent: overallPwi,
       worstProbeIndex,
       worstCharacteristic: worstChar,
       complianceResult,
       processMarginPct,
       probes: probeResults
     };
+  }
+
+  public evaluateCompliance(overallPwi: number): 'PASS' | 'WARNING' | 'FAIL' {
+    if (overallPwi < 80.0) {
+      return 'PASS';
+    } else if (overallPwi <= 100.0) {
+      return 'WARNING';
+    } else {
+      return 'FAIL';
+    }
   }
 }

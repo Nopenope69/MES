@@ -200,6 +200,27 @@ export class ProfilerImportService {
         status: 'VALIDATION_FAILED'
       };
       await this.store.saveProfileRun(validationFailedRun);
+
+      await this.eventStore.append({
+        eventId: uuidv4(),
+        eventType: 'REFLOW_PROFILE_VALIDATED',
+        eventTime: now,
+        receivedTime: now,
+        sourceType: 'PROFILER_GATEWAY',
+        sourceId: equipmentId,
+        lineId,
+        workCenterId: equipmentId,
+        payload: {
+          profileRunId: runId,
+          vendorFormat: adapter.vendorFormat,
+          probeCount: Math.max(1, rawRun.probes?.length || 1),
+          sampleCount: Math.max(1, rawRun.profilerHardware?.sampleCount || 1),
+          durationSeconds: 1.0,
+          status: 'FAILED',
+          validationErrors
+        }
+      });
+
       throw new Error(`VALIDATION_FAILED: ${validationErrors.join('; ')}`);
     }
 

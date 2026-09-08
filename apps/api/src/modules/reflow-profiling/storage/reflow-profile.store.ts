@@ -47,7 +47,7 @@ export class ReflowProfileStore implements IReflowProfileDataStore {
       spec.boardRevision,
       spec.specificationVersion,
       spec.status,
-      spec.alloy,
+      spec.alloy || (spec as any).alloyType || 'SAC305',
       specJson,
       spec.createdBy,
       spec.createdAt

@@ -8,6 +8,13 @@ export class ProfileCorrelationService {
     private telemetryStore: ITelemetryStore = TelemetryStore.getInstance()
   ) {}
 
+  public async correlateRun(
+    run: ReflowProfileRun,
+    windowMinutes: number = 10
+  ): Promise<ProfileTelemetryCorrelation> {
+    return this.correlateProfileWithTelemetry(run.id, windowMinutes);
+  }
+
   public async correlateProfileWithTelemetry(
     profileRunId: string,
     windowMinutes: number = 10

@@ -686,7 +686,7 @@ export const ReflowProfileValidatedPayloadSchema = z.object({
   probeCount: z.number().int().positive(),
   sampleCount: z.number().int().positive(),
   durationSeconds: z.number().positive(),
-  status: z.enum(['SUCCESS', 'VALIDATION_FAILED']),
+  status: z.enum(['SUCCESS', 'VALIDATION_FAILED', 'FAILED']),
   validationErrors: z.array(z.string()).optional()
 });
 

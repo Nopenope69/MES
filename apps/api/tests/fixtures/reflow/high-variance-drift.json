@@ -1,0 +1,512 @@
+[
+  {
+    "timestamp": "2026-09-08T12:00:00.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:01.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:02.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:03.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:04.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:05.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:06.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:07.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:08.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:09.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:10.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:11.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:12.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:13.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:14.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:15.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:16.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:17.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:18.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:19.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:20.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:21.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:22.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:23.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:24.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:25.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:26.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:27.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:28.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      210,
+      245,
+      180
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T12:00:29.000Z",
+    "conveyorSpeedMPerMin": 0.95,
+    "oxygenPpm": 450,
+    "zoneTemperatures": [
+      160,
+      165,
+      175,
+      185,
+      195,
+      210,
+      230,
+      270,
+      245,
+      180
+    ]
+  }
+]

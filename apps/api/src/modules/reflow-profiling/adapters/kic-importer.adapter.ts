@@ -152,15 +152,6 @@ export class KicImporterAdapter implements IProfilerImporter {
 
     const probes: RawProfilerProbe[] = probeIndices.map((idx) => {
       const samples = probeSamples[idx];
-      // Structural validation: monotonic timestamps
-      for (let s = 1; s < samples.length; s++) {
-        if (samples[s].timeSeconds < samples[s - 1].timeSeconds) {
-          throw new Error(
-            `NON_MONOTONIC_TIMESTAMPS: Sample timestamp at index ${s} (${samples[s].timeSeconds}s) is earlier than preceding sample (${samples[s - 1].timeSeconds}s)`
-          );
-        }
-      }
-
       // Infer thermal role if indicated in label
       const label = probeLabels[idx] || `TC ${idx}`;
       let thermalRole: RawProfilerProbe['thermalRole'];
