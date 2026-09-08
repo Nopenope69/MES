@@ -727,5 +727,281 @@ CREATE TABLE IF NOT EXISTS printer_tuning_events (
 
 CREATE INDEX IF NOT EXISTS idx_tuning_correction ON printer_tuning_events(correction_id);
 
+-- ============================================================================
+-- PHASE 5: Fleet Orchestration, Logistics, Telemetry & Predictive Quality
+-- ============================================================================
+
+-- 1. Material Reservations (Atomic concurrency lock preventing double-mounting)
+CREATE TABLE IF NOT EXISTS material_reservations (
+  id VARCHAR(64) PRIMARY KEY,
+  reel_id VARCHAR(64) NOT NULL,
+  line_id VARCHAR(64) NOT NULL,
+  slot_no INTEGER NOT NULL,
+  part_number VARCHAR(64) NOT NULL,
+  reserved_for_request_id VARCHAR(64),
+  purpose VARCHAR(128) NOT NULL,
+  correlation_id VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'RESERVED',
+  reserved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  mounted_at TIMESTAMP,
+  consumed_at TIMESTAMP,
+  released_at TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_material_res_active 
+ON material_reservations(reel_id) 
+WHERE status IN ('RESERVED', 'MOUNTED');
+
+CREATE INDEX IF NOT EXISTS idx_material_res_line 
+ON material_reservations(line_id, status);
+
+-- 2. AGV Fleet Units
+CREATE TABLE IF NOT EXISTS agv_units (
+  id VARCHAR(64) PRIMARY KEY,
+  code VARCHAR(32) NOT NULL UNIQUE,
+  name VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'IDLE',
+  current_location VARCHAR(64) NOT NULL DEFAULT 'CHARGING_DOCK_1',
+  battery_percent DECIMAL(5, 2) NOT NULL DEFAULT 100.0,
+  current_mission_id VARCHAR(64),
+  last_heartbeat_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. AGV Missions (Transport Orders)
+CREATE TABLE IF NOT EXISTS agv_missions (
+  id VARCHAR(64) PRIMARY KEY,
+  agv_id VARCHAR(64),
+  mission_type VARCHAR(32) NOT NULL,
+  material_type VARCHAR(32) NOT NULL,
+  material_id VARCHAR(64) NOT NULL,
+  source_location VARCHAR(64) NOT NULL,
+  target_line_id VARCHAR(64) NOT NULL,
+  target_work_center_id VARCHAR(64) NOT NULL,
+  priority VARCHAR(16) NOT NULL DEFAULT 'STANDARD',
+  status VARCHAR(32) NOT NULL DEFAULT 'CREATED',
+  dock_delivery_authorized INTEGER NOT NULL DEFAULT 0,
+  dock_authorized_at TIMESTAMP,
+  dock_authorized_by VARCHAR(64),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  dispatched_at TIMESTAMP,
+  completed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_agv_missions_status 
+ON agv_missions(status, priority);
+
+CREATE INDEX IF NOT EXISTS idx_agv_missions_target 
+ON agv_missions(target_line_id, target_work_center_id);
+
+-- 4. Material Replenishment Requests (Lifecycle decoupled from vehicle missions)
+CREATE TABLE IF NOT EXISTS material_replenishment_requests (
+  id VARCHAR(64) PRIMARY KEY,
+  line_id VARCHAR(64) NOT NULL,
+  work_center_id VARCHAR(64) NOT NULL,
+  slot_no INTEGER NOT NULL,
+  part_number VARCHAR(64) NOT NULL,
+  current_reel_id VARCHAR(64),
+  remaining_quantity INTEGER NOT NULL DEFAULT 0,
+  estimated_minutes_remaining DECIMAL(8, 2) NOT NULL DEFAULT 0,
+  confidence VARCHAR(32) NOT NULL DEFAULT 'ACTUAL_PLACEMENT_TELEMETRY',
+  status VARCHAR(32) NOT NULL DEFAULT 'REQUESTED',
+  assigned_mission_id VARCHAR(64),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  gated_at TIMESTAMP,
+  closed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_replenish_status 
+ON material_replenishment_requests(status, line_id);
+
+-- 5. Time-Series Telemetry Store (Decoupled from Transactional EventStore)
+CREATE TABLE IF NOT EXISTS telemetry_points (
+  id VARCHAR(64) PRIMARY KEY,
+  timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  factory_id VARCHAR(64) NOT NULL DEFAULT 'site-noida-p4',
+  bay_id VARCHAR(64) NOT NULL DEFAULT 'area-smt-01',
+  line_id VARCHAR(64) NOT NULL,
+  work_center_id VARCHAR(64),
+  equipment_id VARCHAR(64),
+  asset_id VARCHAR(64) NOT NULL,
+  metric VARCHAR(64) NOT NULL,
+  value DECIMAL(12, 4) NOT NULL,
+  unit VARCHAR(16) NOT NULL,
+  metadata_json TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_telemetry_query 
+ON telemetry_points(asset_id, metric, timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_telemetry_line 
+ON telemetry_points(line_id, metric, timestamp);
+
+-- 6. Predictive Anomalies (Derived statistical facts)
+CREATE TABLE IF NOT EXISTS predictive_anomalies (
+  id VARCHAR(64) PRIMARY KEY,
+  anomaly_type VARCHAR(64) NOT NULL,
+  line_id VARCHAR(64) NOT NULL,
+  work_center_id VARCHAR(64) NOT NULL,
+  asset_id VARCHAR(64) NOT NULL,
+  metric VARCHAR(64) NOT NULL,
+  score DECIMAL(8, 3) NOT NULL,
+  confidence DECIMAL(5, 4) NOT NULL,
+  baseline_value DECIMAL(10, 4) NOT NULL,
+  observed_value DECIMAL(10, 4) NOT NULL,
+  details_json TEXT,
+  status VARCHAR(32) NOT NULL DEFAULT 'OPEN',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_anomalies_status 
+ON predictive_anomalies(status, line_id);
+
+-- 7. Predictive Actions (Safety Gated Physical Interventions)
+CREATE TABLE IF NOT EXISTS predictive_actions (
+  id VARCHAR(64) PRIMARY KEY,
+  anomaly_id VARCHAR(64) NOT NULL,
+  action_type VARCHAR(64) NOT NULL,
+  target_work_center_id VARCHAR(64) NOT NULL,
+  parameters_json TEXT,
+  reason TEXT NOT NULL,
+  priority VARCHAR(16) NOT NULL DEFAULT 'STANDARD',
+  status VARCHAR(32) NOT NULL DEFAULT 'RECOMMENDED',
+  authorization_mode VARCHAR(32),
+  authorized_by VARCHAR(64),
+  authorized_at TIMESTAMP,
+  executed_at TIMESTAMP,
+  execution_result_json TEXT,
+  error_message TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_pred_actions_status 
+ON predictive_actions(status, target_work_center_id);
+
+-- 8. Production Metrics & OEE Snapshots
+CREATE TABLE IF NOT EXISTS production_metrics (
+  id VARCHAR(64) PRIMARY KEY,
+  line_id VARCHAR(64) NOT NULL,
+  calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  availability DECIMAL(6, 4) NOT NULL,
+  performance DECIMAL(6, 4) NOT NULL,
+  quality DECIMAL(6, 4) NOT NULL,
+  oee DECIMAL(6, 4) NOT NULL,
+  takt_adherence DECIMAL(6, 4) NOT NULL,
+  operating_time_seconds DECIMAL(10, 2) NOT NULL,
+  planned_time_seconds DECIMAL(10, 2) NOT NULL,
+  total_output INTEGER NOT NULL DEFAULT 0,
+  good_output INTEGER NOT NULL DEFAULT 0,
+  downtime_seconds DECIMAL(10, 2) NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_production_metrics_line 
+ON production_metrics(line_id, calculated_at);
+
+-- ============================================================================
+-- PHASE 6: Closed-Loop Reflow Oven Telemetry & Thermal Profiling Engine
+-- ============================================================================
+
+-- 1. Versioned Thermal Specifications
+CREATE TABLE IF NOT EXISTS reflow_thermal_specifications (
+  id VARCHAR(64) PRIMARY KEY,
+  recipe_id VARCHAR(64) NOT NULL,
+  board_part_number VARCHAR(64) NOT NULL,
+  board_revision VARCHAR(32) NOT NULL,
+  specification_version INTEGER NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE', -- DRAFT, ACTIVE, RETIRED
+  alloy VARCHAR(32) NOT NULL,
+  specification_json TEXT NOT NULL,
+  created_by VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(recipe_id, board_part_number, board_revision, specification_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reflow_spec_scope 
+ON reflow_thermal_specifications(recipe_id, board_part_number, board_revision);
+
+-- 2. Physical Profile Runs (Immutable historical records)
+CREATE TABLE IF NOT EXISTS reflow_profile_runs (
+  id VARCHAR(64) PRIMARY KEY,
+  line_id VARCHAR(64) NOT NULL,
+  equipment_id VARCHAR(64) NOT NULL,
+  recipe_id VARCHAR(64) NOT NULL,
+  board_part_number VARCHAR(64) NOT NULL,
+  board_revision VARCHAR(32) NOT NULL,
+  file_sha256 VARCHAR(64) NOT NULL,
+  specification_id VARCHAR(64) NOT NULL,
+  specification_version INTEGER NOT NULL,
+  calculation_version VARCHAR(32) NOT NULL,
+  overall_pwi DECIMAL(6, 2) NOT NULL,
+  compliance_result VARCHAR(32) NOT NULL, -- PASS, WARNING, FAIL
+  status VARCHAR(32) NOT NULL, -- UPLOADED, PARSED, PARSE_FAILED, VALIDATED, VALIDATION_FAILED, REVIEW_REQUIRED, APPROVED, REJECTED, ACTIVE, RETIRED
+  metadata_json TEXT NOT NULL,
+  imported_by VARCHAR(64) NOT NULL,
+  imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  approved_by VARCHAR(64),
+  approved_at TIMESTAMP,
+  activated_at TIMESTAMP,
+  retired_at TIMESTAMP
+);
+
+-- Partial Unique Index guaranteeing at most one ACTIVE baseline per applicability scope
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reflow_profile_active_scope 
+ON reflow_profile_runs(line_id, equipment_id, recipe_id, board_part_number, board_revision) 
+WHERE status = 'ACTIVE';
+
+CREATE INDEX IF NOT EXISTS idx_reflow_profile_scope 
+ON reflow_profile_runs(line_id, equipment_id, recipe_id, board_part_number, board_revision);
+
+CREATE INDEX IF NOT EXISTS idx_reflow_profile_sha 
+ON reflow_profile_runs(file_sha256);
+
+-- 3. Profile Probes & Normalized Time-Series Samples
+CREATE TABLE IF NOT EXISTS reflow_profile_probes (
+  id VARCHAR(64) PRIMARY KEY,
+  profile_run_id VARCHAR(64) NOT NULL,
+  probe_index INTEGER NOT NULL,
+  label VARCHAR(64) NOT NULL,
+  thermal_role VARCHAR(32) NOT NULL,
+  metrics_json TEXT NOT NULL,
+  pwi_json TEXT NOT NULL,
+  samples_json TEXT NOT NULL, -- Explicit array of { timeSeconds, temperatureC }
+  UNIQUE(profile_run_id, probe_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reflow_probe_run 
+ON reflow_profile_probes(profile_run_id);
+
+-- 4. Active Process Compliance State Snapshot
+CREATE TABLE IF NOT EXISTS reflow_process_states (
+  line_id VARCHAR(64) NOT NULL,
+  equipment_id VARCHAR(64) NOT NULL,
+  recipe_id VARCHAR(64) NOT NULL,
+  board_part_number VARCHAR(64) NOT NULL,
+  board_revision VARCHAR(32) NOT NULL,
+  active_profile_run_id VARCHAR(64),
+  compliance_status VARCHAR(32) NOT NULL, -- COMPLIANT, DRIFT_SUSPECTED, DRIFT_CONFIRMED, REVALIDATION_REQUIRED, DATA_INSUFFICIENT
+  consecutive_drift_seconds DECIMAL(8, 2) NOT NULL DEFAULT 0.0,
+  consecutive_healthy_seconds DECIMAL(8, 2) NOT NULL DEFAULT 0.0,
+  last_evaluated_at TIMESTAMP NOT NULL,
+  drift_metrics_json TEXT NOT NULL,
+  PRIMARY KEY(line_id, equipment_id, recipe_id, board_part_number, board_revision)
+);
+
+-- 5. Contemporaneous Profile-Telemetry Correlation
+CREATE TABLE IF NOT EXISTS reflow_profile_correlations (
+  profile_run_id VARCHAR(64) PRIMARY KEY,
+  line_id VARCHAR(64) NOT NULL,
+  equipment_id VARCHAR(64) NOT NULL,
+  window_start TIMESTAMP NOT NULL,
+  window_end TIMESTAMP NOT NULL,
+  sample_count INTEGER NOT NULL,
+  telemetry_integrity_score DECIMAL(5, 4) NOT NULL,
+  correlation_json TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
 
 

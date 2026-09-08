@@ -1,4 +1,5 @@
-# Phase 6 Design Specification: Closed-Loop Reflow Oven Telemetry & Thermal Profiling Engine
+# Phase 6: Closed-Loop Reflow Oven Telemetry & Thermal Profiling Engine
+## Deep Architecture Specification (IPC-7530B-Aligned & J-STD-001H Process-Control Implementation)
 
 - **Author**: Antigravity Autonomous Agent (Tier-1 SMT Specialist)
 - **Document Version**: 1.0.0 (Validated Design Baseline)
@@ -120,44 +121,44 @@ A physical profiler pass is an immutable historical measurement. Its status trac
              │
              ├── Parsing Exception / Corrupt
              ▼
-      ┌──────────────┐   [Failure]   ┌──────────────┐
-      │   PARSING    ├──────────────►│ PARSE_FAILED │
-      └──────┬───────┘               └──────────────┘
-             │ [Success]
-             ▼
-      ┌──────────────┐   [Failure]   ┌──────────────────┐
-      │  VALIDATING  ├──────────────►│VALIDATION_FAILED │
-      └──────┬───────┘               └──────────────────┘
-             │ [Success]
-             ▼
-      ┌──────────────┐
-      │  VALIDATED   │
-      └──────┬───────┘
-             │
-             ▼
-      ┌────────────────┐ [QA Rejection]┌──────────────┐
-      │ REVIEW_REQUIRED├──────────────►│   REJECTED   │
-      └──────┬─────────┘               └──────────────┘
-             │ [QA Approved]
-             ▼
-      ┌──────────────┐
-      │   APPROVED   │
-      └──────┬───────┘
-             │ [Operator Mount]
-             ▼
-      ┌──────────────┐
-      │    ACTIVE    │ (Governs current production)
-      └──────┬───────┘
-             │ [Superseded by New Active Run]
-             ▼
-      ┌──────────────┐
-      │    RETIRED    │ (Immutable historical archive)
-      └──────────────┘
+       ┌──────────────┐   [Failure]   ┌──────────────────┐
+       │  VALIDATING  ├──────────────►│VALIDATION_FAILED │ (Corrupt data, non-monotonic timestamps,
+       └──────┬───────┘               └──────────────────┘  physical temperature bounds violated)
+              │ [Success: REFLOW_PROFILE_VALIDATED]
+              ▼
+       ┌──────────────┐
+       │  VALIDATED   │ (Dataset is physically usable & structurally sound)
+       └──────┬───────┘
+              │ [PWI Computation: REFLOW_PROFILE_COMPLIANCE_EVALUATED]
+              ├── Result: PASS | WARNING | FAIL
+              ▼
+       ┌────────────────┐ [QA Rejection]┌──────────────┐
+       │ REVIEW_REQUIRED├──────────────►│   REJECTED   │
+       └──────┬─────────┘               └──────────────┘
+              │ [QA Approved]
+              ▼
+       ┌──────────────┐
+       │   APPROVED   │
+       └──────┬───────┘
+              │ [Operator Mount]
+              ▼
+       ┌──────────────┐
+       │    ACTIVE    │ (Governs current production)
+       └──────┬───────┘
+              │ [Superseded by New Active Run]
+              ▼
+       ┌──────────────┐
+       │    RETIRED    │ (Immutable historical archive)
+       └──────────────┘
 ```
 
 > [!IMPORTANT]
+> **Validation vs Compliance Evaluation Semantics**:
+> `REFLOW_PROFILE_VALIDATED` confirms structural, temporal, and physical integrity of the measurement file. If a file is malformed or corrupt, it transitions to `VALIDATION_FAILED`.
+> Once validated, `REFLOW_PROFILE_COMPLIANCE_EVALUATED` is emitted with `complianceResult: 'PASS' | 'WARNING' | 'FAIL'` based on PWI calculation. A run with $PWI = 131.1\%$ is a valid historical measurement that evaluates to `FAIL` — it is **not** a validation failure.
+>
 > **PWI-FAIL Activation Guard Invariant**:
-> A profile run with `complianceResult === 'FAIL'` ($PWI > 100\%$) may legitimately transition to `REVIEW_REQUIRED` (and can be formally `REJECTED` by QA), but **CANNOT transition to `ACTIVE`**. Any call to `activateProfileRun()` on a run with $PWI > 100\%$ throws a deterministic domain error: `CANNOT_ACTIVATE_NON_COMPLIANT_PROFILE`. Only runs with $PWI \le 100\%$ (`PASS` or `WARNING`) are eligible for production baseline activation.
+> A profile run with `complianceResult === 'FAIL'` ($PWI > 100\%$) enters `REVIEW_REQUIRED` (and can be formally `REJECTED` by QA), but is **strictly barred from transitioning to `ACTIVE`**. Any call to `activateProfileRun()` on a non-compliant run throws `CANNOT_ACTIVATE_NON_COMPLIANT_PROFILE`. Only runs with $PWI \le 100\%$ (`PASS` or `WARNING`) are eligible for production baseline activation.
 
 ### B. Process Compliance State (Continuous Real-Time Monitoring)
 
@@ -487,6 +488,19 @@ Evaluated over observation window $W$ against validated baseline parameters:
   Given verified configuration vector where $\sum w_z + w_v + w_{O2} = 1.0$:
   $$S_{\text{drift}} = \sum_{z} w_z \left( \frac{|\mu_{z, W} - T_{z, \text{baseline}}|}{\text{zoneTolerance}_z} \right) + w_v \left( \frac{|\mu_{v, W} - v_{\text{baseline}}|}{\text{speedTolerance}} \right) + w_{O2} \left( \frac{|\mu_{O2, W} - O2_{\text{baseline}}|}{\text{O2Tolerance}} \right)$$
 
+### 4. Conservative Thermal Impact Estimation
+`ThermalImpactService` evaluates process-risk without manufacturing unverified thermal certainty:
+```typescript
+export interface ThermalImpactEstimate {
+  estimatedPeakDeltaC?: number;
+  estimatedTalDeltaSeconds?: number;
+  confidence: number; // 0.0 to 1.0
+  basis: 'EMPIRICAL' | 'MODEL' | 'RULE_BASED' | 'UNKNOWN';
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+```
+**Conservative Safety Principle**: `UNKNOWN` or low-confidence estimates must never be treated as proof of compliance. The MES may infer risk when drift occurs, but never manufactures thermal certainty that has not been physically validated by a profiler pass.
+
 ---
 
 ## 6. Secure Profiler Importer Pipeline
@@ -495,7 +509,7 @@ Evaluated over observation window $W$ against validated baseline parameters:
 Upload (Buffer, Filename, Mime)
    │
    ▼
-[ Security & Size Pre-flight ] (Max 15MB, extension/MIME check, XXE disabled)
+[ Security & Size Pre-flight ] (Max 15MB, extension/MIME check, XXE-safe parser configuration with external entity resolution disabled)
    │
    ▼
 [ Server-Computed SHA-256 ] ──► [ Idempotency Check ] (Hash + Scope)
@@ -572,7 +586,7 @@ REFLOW_INTERLOCK_   REFLOW_INTERLOCK_  MachineControlModule
 | # | Category | Verification Scope | Target Assertion |
 |---|---|---|---|
 | **01** | Adapter Dispatch | Sniffs KIC, Datapaq, and M.O.L.E. file signatures | Routes correctly; unknown formats fail with `PARSE_FAILED` |
-| **02** | Importer Security & Fuzzing | XXE payload, oversized payload, NaN/Infinity inputs | Zero process crashes; no network calls; clean quarantine |
+| **02** | Importer Security & Fuzzing | XXE entity expansion attempt, oversized payload, NaN/Infinity inputs | Zero process crashes; external entity resolution blocked; clean quarantine |
 | **03** | Structural Normalization | Monotonic timestamps, out-of-order samples, duplicate times | Discontinuous files fail with `VALIDATION_FAILED` |
 | **04** | Units & Calibration | Fahrenheit to Celsius, minutes to seconds, probe offsets | Raw vs corrected temperatures clearly distinguishable |
 | **05** | PWI Mathematical Accuracy | Midpoint PWI formulation on benchmark values | Computed values match exact formulas ($PWI = 20.0\%$, $TAL\_PWI = 131.1\%$) |
