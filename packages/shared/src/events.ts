@@ -54,7 +54,34 @@ export const CanonicalEventTypeEnum = z.enum([
   'PRINTER_PARAMETERS_MODIFIED',
   'PRINTER_COMMAND_ACKNOWLEDGED',
   'CLOSED_LOOP_CORRECTION_VERIFIED',
-  'PRE_REFLOW_PANEL_DIVERTED'
+  'PRE_REFLOW_PANEL_DIVERTED',
+  'AGV_MISSION_DISPATCHED',
+  'AGV_MISSION_STATE_CHANGED',
+  'AGV_MISSION_BLOCKED',
+  'AGV_MISSION_FAILED',
+  'AGV_MISSION_COMPLETED',
+  'MATERIAL_REPLENISHMENT_REQUESTED',
+  'MATERIAL_RESERVED',
+  'MATERIAL_DELIVERED',
+  'PREDICTIVE_ANOMALY_DETECTED',
+  'PREDICTIVE_ACTION_RECOMMENDED',
+  'PREDICTIVE_ACTION_AUTHORIZED',
+  'PREDICTIVE_ACTION_EXECUTED',
+  'PREDICTIVE_ACTION_FAILED',
+  // Phase 6: Closed-Loop Reflow Thermal Profiling & Drift
+  'REFLOW_PROFILE_UPLOADED',
+  'REFLOW_PROFILE_VALIDATED',
+  'REFLOW_PROFILE_COMPLIANCE_EVALUATED',
+  'REFLOW_PROFILE_APPROVED',
+  'REFLOW_PROFILE_REJECTED',
+  'REFLOW_PROFILE_ACTIVATED',
+  'REFLOW_PROFILE_RETIRED',
+  'REFLOW_DRIFT_DETECTED',
+  'REFLOW_PROCESS_STATE_CHANGED',
+  'REFLOW_INTERLOCK_REQUESTED',
+  'REFLOW_INTERLOCK_CONFIRMED',
+  'REFLOW_INTERLOCK_FAILED',
+  'REFLOW_REVALIDATION_REQUESTED'
 ]);
 export type CanonicalEventType = z.infer<typeof CanonicalEventTypeEnum>;
 export type MesEventType = CanonicalEventType;
@@ -71,7 +98,12 @@ export const SourceTypeEnum = z.enum([
   'AOI_POST_REWORK',
   'SPI_GATEWAY',
   'PRINTER_CONTROLLER',
-  'IPC_CFX_BROKER'
+  'IPC_CFX_BROKER',
+  'AGV_FLEET',
+  'LOGISTICS_MANAGER',
+  'PREDICTIVE_ENGINE',
+  'PROFILER_GATEWAY',
+  'REFLOW_CONTROLLER'
 ]);
 export type SourceType = z.infer<typeof SourceTypeEnum>;
 
@@ -497,6 +529,310 @@ export const PreReflowPanelDivertedPayloadSchema = z.object({
   criticalDefectsCount: z.number()
 });
 
+// Phase 5: Logistics & AGV Event Payloads
+export const AgvMissionDispatchedPayloadSchema = z.object({
+  missionId: z.string(),
+  agvId: z.string(),
+  missionType: z.enum(['REEL_DELIVERY', 'PASTE_DELIVERY', 'EMPTY_RETURN', 'MAGAZINE_TRANSFER']),
+  materialType: z.enum(['COMPONENT_REEL', 'SOLDER_PASTE_JAR', 'STENCIL', 'PCB_MAGAZINE']),
+  materialId: z.string(),
+  sourceLocation: z.string(),
+  targetLineId: z.string(),
+  targetWorkCenterId: z.string(),
+  priority: z.enum(['CRITICAL', 'HIGH', 'STANDARD']).default('STANDARD')
+});
+
+export const AgvMissionStateChangedPayloadSchema = z.object({
+  missionId: z.string(),
+  agvId: z.string(),
+  previousState: z.string(),
+  newState: z.enum([
+    'CREATED',
+    'QUEUED',
+    'DISPATCHED',
+    'EN_ROUTE_PICKUP',
+    'PICKING_UP',
+    'EN_ROUTE_DELIVERY',
+    'DELIVERING',
+    'COMPLETED',
+    'CANCELLED',
+    'FAILED',
+    'BLOCKED',
+    'RETURN_TO_BASE'
+  ]),
+  location: z.string().optional(),
+  batteryPercent: z.number().optional(),
+  reason: z.string().optional()
+});
+
+export const AgvMissionBlockedPayloadSchema = z.object({
+  missionId: z.string(),
+  agvId: z.string(),
+  reason: z.string(),
+  location: z.string().optional()
+});
+
+export const AgvMissionFailedPayloadSchema = z.object({
+  missionId: z.string(),
+  agvId: z.string(),
+  failureCode: z.string(),
+  reason: z.string()
+});
+
+export const AgvMissionCompletedPayloadSchema = z.object({
+  missionId: z.string(),
+  agvId: z.string(),
+  targetLineId: z.string(),
+  materialId: z.string(),
+  completedAt: z.string()
+});
+
+export const MaterialReplenishmentRequestedPayloadSchema = z.object({
+  requestId: z.string(),
+  lineId: z.string(),
+  workCenterId: z.string(),
+  slotNo: z.number().int().positive(),
+  partNumber: z.string(),
+  currentReelId: z.string().optional(),
+  remainingQuantity: z.number().int().nonnegative(),
+  estimatedMinutesRemaining: z.number(),
+  confidence: z.enum(['ACTUAL_PLACEMENT_TELEMETRY', 'MACHINE_REPORTED', 'THEORETICAL_FALLBACK'])
+});
+
+export const MaterialReservedPayloadSchema = z.object({
+  reservationId: z.string(),
+  reelId: z.string(),
+  lineId: z.string(),
+  slotNo: z.number().int().positive(),
+  partNumber: z.string(),
+  reservedForRequestId: z.string().optional()
+});
+
+export const MaterialDeliveredPayloadSchema = z.object({
+  requestId: z.string().optional(),
+  reservationId: z.string().optional(),
+  reelId: z.string(),
+  lineId: z.string(),
+  workCenterId: z.string(),
+  slotNo: z.number().int().positive(),
+  deliveryConfirmedBy: z.string()
+});
+
+// Phase 5: Predictive Quality Intelligence Payloads
+export const PredictiveAnomalyDetectedPayloadSchema = z.object({
+  anomalyId: z.string(),
+  anomalyType: z.enum(['NOZZLE_PICKUP_DEGRADATION', 'APERTURE_CLOGGING_TREND', 'FEEDER_INDEXING_JITTER']),
+  lineId: z.string(),
+  workCenterId: z.string(),
+  assetId: z.string(),
+  metric: z.string(),
+  score: z.number(),
+  confidence: z.number(),
+  baselineValue: z.number(),
+  observedValue: z.number(),
+  details: z.record(z.any()).optional()
+});
+
+export const PredictiveActionRecommendedPayloadSchema = z.object({
+  actionId: z.string(),
+  anomalyId: z.string(),
+  actionType: z.enum(['CLEAN_STENCIL', 'INSPECT_NOZZLE', 'REPLACE_FEEDER', 'MICRO_TUNE_PRESSURE']),
+  targetWorkCenterId: z.string(),
+  parameters: z.record(z.any()).optional(),
+  reason: z.string(),
+  priority: z.enum(['CRITICAL', 'HIGH', 'STANDARD']).default('STANDARD')
+});
+
+export const PredictiveActionAuthorizedPayloadSchema = z.object({
+  actionId: z.string(),
+  authorizedBy: z.string(),
+  authorizationMode: z.enum(['MANUAL_OVERRIDE', 'POLICY_AUTO']),
+  authorizedAt: z.string()
+});
+
+export const PredictiveActionExecutedPayloadSchema = z.object({
+  actionId: z.string(),
+  executedAt: z.string(),
+  success: z.boolean(),
+  commandResult: z.record(z.any()).optional()
+});
+
+export const PredictiveActionFailedPayloadSchema = z.object({
+  actionId: z.string(),
+  failedAt: z.string(),
+  errorCode: z.string(),
+  reason: z.string()
+});
+
+// Phase 6: Closed-Loop Reflow Thermal Profiling & Drift Payloads
+export const ReflowProfileUploadedPayloadSchema = z.object({
+  profileRunId: z.string(),
+  fileName: z.string(),
+  fileSha256: z.string(),
+  fileSizeBytes: z.number().int().positive(),
+  vendorFormat: z.enum(['KIC', 'DATAPAQ', 'MOLE', 'GENERIC_CSV', 'UNKNOWN']),
+  lineId: z.string(),
+  equipmentId: z.string(),
+  recipeId: z.string(),
+  boardPartNumber: z.string(),
+  boardRevision: z.string(),
+  uploadedBy: z.string(),
+  uploadedAt: z.string()
+});
+
+export const ReflowProfileValidatedPayloadSchema = z.object({
+  profileRunId: z.string(),
+  vendorFormat: z.string(),
+  probeCount: z.number().int().positive(),
+  sampleCount: z.number().int().positive(),
+  durationSeconds: z.number().positive(),
+  status: z.enum(['SUCCESS', 'VALIDATION_FAILED']),
+  validationErrors: z.array(z.string()).optional()
+});
+
+export const ReflowProfileComplianceEvaluatedPayloadSchema = z.object({
+  profileRunId: z.string(),
+  specificationId: z.string(),
+  specificationVersion: z.number().int().positive(),
+  overallPwi: z.number(),
+  complianceResult: z.enum(['PASS', 'WARNING', 'FAIL']),
+  evaluatedAt: z.string(),
+  worstProbeIndex: z.number().int(),
+  worstCharacteristic: z.enum(['RAMP', 'SOAK', 'TAL', 'PEAK', 'COOLING']),
+  probeResults: z.array(z.object({
+    probeIndex: z.number().int(),
+    label: z.string(),
+    pwi: z.object({
+      overall: z.number(),
+      ramp: z.number(),
+      soak: z.number(),
+      tal: z.number(),
+      peak: z.number(),
+      cooling: z.number()
+    })
+  })).optional()
+});
+
+export const ReflowProfileApprovedPayloadSchema = z.object({
+  profileRunId: z.string(),
+  approvedBy: z.string(),
+  approvedAt: z.string(),
+  overallPwi: z.number(),
+  complianceResult: z.enum(['PASS', 'WARNING']),
+  comments: z.string().optional(),
+  electronicSignature: z.object({
+    signerName: z.string(),
+    signerRole: z.string(),
+    meaning: z.string(),
+    timestamp: z.string()
+  }).optional()
+});
+
+export const ReflowProfileRejectedPayloadSchema = z.object({
+  profileRunId: z.string(),
+  rejectedBy: z.string(),
+  rejectedAt: z.string(),
+  reason: z.string(),
+  overallPwi: z.number().optional()
+});
+
+export const ReflowProfileActivatedPayloadSchema = z.object({
+  profileRunId: z.string(),
+  supersededProfileRunId: z.string().optional(),
+  lineId: z.string(),
+  equipmentId: z.string(),
+  recipeId: z.string(),
+  boardPartNumber: z.string(),
+  boardRevision: z.string(),
+  activatedBy: z.string(),
+  activatedAt: z.string()
+});
+
+export const ReflowProfileRetiredPayloadSchema = z.object({
+  profileRunId: z.string(),
+  retiredBy: z.string(),
+  retiredAt: z.string(),
+  reason: z.string()
+});
+
+export const ReflowDriftDetectedPayloadSchema = z.object({
+  lineId: z.string(),
+  equipmentId: z.string(),
+  recipeId: z.string(),
+  boardPartNumber: z.string(),
+  boardRevision: z.string(),
+  activeProfileRunId: z.string(),
+  driftType: z.enum(['MEAN_SHIFT', 'VARIANCE_INSTABILITY', 'CONVEYOR_SPEED_DRIFT', 'OXYGEN_EXCURSION', 'MULTI_ZONE_COLLAPSE']),
+  severity: z.enum(['MINOR', 'MODERATE', 'CRITICAL']),
+  compositeSeverityScore: z.number(),
+  consecutiveDriftSeconds: z.number(),
+  driftingZones: z.array(z.object({
+    zoneIndex: z.number().int(),
+    zoneName: z.string(),
+    meanDeviationC: z.number(),
+    meanZScore: z.number(),
+    variabilityZScore: z.number(),
+    windowMeanC: z.number(),
+    baselineMeanC: z.number()
+  })),
+  speedDeviationCmPerMin: z.number().optional(),
+  oxygenDeviationPpm: z.number().optional()
+});
+
+export const ReflowProcessStateChangedPayloadSchema = z.object({
+  lineId: z.string(),
+  equipmentId: z.string(),
+  recipeId: z.string(),
+  boardPartNumber: z.string(),
+  boardRevision: z.string(),
+  activeProfileRunId: z.string().optional(),
+  previousState: z.enum(['COMPLIANT', 'DRIFT_SUSPECTED', 'DRIFT_CONFIRMED', 'REVALIDATION_REQUIRED', 'DATA_INSUFFICIENT']),
+  newState: z.enum(['COMPLIANT', 'DRIFT_SUSPECTED', 'DRIFT_CONFIRMED', 'REVALIDATION_REQUIRED', 'DATA_INSUFFICIENT']),
+  reason: z.string(),
+  changedAt: z.string()
+});
+
+export const ReflowInterlockRequestedPayloadSchema = z.object({
+  interlockId: z.string(),
+  lineId: z.string(),
+  equipmentId: z.string(),
+  triggerType: z.enum(['CRITICAL_TEMPERATURE_DROP', 'CONVEYOR_STOP', 'EXTREME_DRIFT_CONFIRMED', 'OXYGEN_CONTAMINATION']),
+  requestedAction: z.enum(['EMERGENCY_HOLD', 'LINE_STOP', 'INLET_GATE_CLOSE']),
+  reason: z.string(),
+  requestedAt: z.string(),
+  sourceService: z.string().default('ReflowProfilingModule')
+});
+
+export const ReflowInterlockConfirmedPayloadSchema = z.object({
+  interlockId: z.string(),
+  lineId: z.string(),
+  equipmentId: z.string(),
+  hardwareLatchState: z.string(),
+  confirmedAt: z.string(),
+  executionDurationMs: z.number().nonnegative()
+});
+
+export const ReflowInterlockFailedPayloadSchema = z.object({
+  interlockId: z.string(),
+  lineId: z.string(),
+  equipmentId: z.string(),
+  errorCode: z.string(),
+  errorMessage: z.string(),
+  failedAt: z.string()
+});
+
+export const ReflowRevalidationRequestedPayloadSchema = z.object({
+  lineId: z.string(),
+  equipmentId: z.string(),
+  recipeId: z.string(),
+  boardPartNumber: z.string(),
+  boardRevision: z.string(),
+  activeProfileRunId: z.string(),
+  reason: z.string(),
+  marginDepletedPct: z.number().optional(),
+  requestedAt: z.string()
+});
+
 /**
  * Universal Event Envelope Schema.
  */
@@ -509,6 +845,7 @@ export const MesEventEnvelopeSchema = z.object({
   sourceId: z.string(),      // e.g. "fuji-nxt-line1", "tablet-splicing-kiosk"
   sequenceId: z.number().int().nonnegative().optional(),
   siteId: z.string().default('SITE-01'),
+  lineId: z.string().optional(),
   workCenterId: z.string(),
   assetPath: z.string().optional(),
   ingressEventId: z.string().optional(),
@@ -516,8 +853,24 @@ export const MesEventEnvelopeSchema = z.object({
   batchId: z.string().optional(),
   operatorId: z.string().optional(),
   correlationId: z.string().optional(),
+  causationId: z.string().optional(),
   schemaVersion: z.string().optional(),
   payload: z.record(z.any())
 });
 
 export type MesEventEnvelope = z.infer<typeof MesEventEnvelopeSchema>;
+
+// Phase 6 Inferred Payload Types
+export type ReflowProfileUploadedPayload = z.infer<typeof ReflowProfileUploadedPayloadSchema>;
+export type ReflowProfileValidatedPayload = z.infer<typeof ReflowProfileValidatedPayloadSchema>;
+export type ReflowProfileComplianceEvaluatedPayload = z.infer<typeof ReflowProfileComplianceEvaluatedPayloadSchema>;
+export type ReflowProfileApprovedPayload = z.infer<typeof ReflowProfileApprovedPayloadSchema>;
+export type ReflowProfileRejectedPayload = z.infer<typeof ReflowProfileRejectedPayloadSchema>;
+export type ReflowProfileActivatedPayload = z.infer<typeof ReflowProfileActivatedPayloadSchema>;
+export type ReflowProfileRetiredPayload = z.infer<typeof ReflowProfileRetiredPayloadSchema>;
+export type ReflowDriftDetectedPayload = z.infer<typeof ReflowDriftDetectedPayloadSchema>;
+export type ReflowProcessStateChangedPayload = z.infer<typeof ReflowProcessStateChangedPayloadSchema>;
+export type ReflowInterlockRequestedPayload = z.infer<typeof ReflowInterlockRequestedPayloadSchema>;
+export type ReflowInterlockConfirmedPayload = z.infer<typeof ReflowInterlockConfirmedPayloadSchema>;
+export type ReflowInterlockFailedPayload = z.infer<typeof ReflowInterlockFailedPayloadSchema>;
+export type ReflowRevalidationRequestedPayload = z.infer<typeof ReflowRevalidationRequestedPayloadSchema>;

@@ -575,4 +575,279 @@ export interface SpiSpcMetrics {
   lsl: number;
 }
 
+/**
+ * Phase 6: Closed-Loop Reflow Oven Telemetry & Thermal Profiling Domain Models
+ * (IPC-7530B-aligned thermal profiling & J-STD-001H process-control implementation)
+ */
+
+export interface ReflowThermalSpecification {
+  id: string;
+  recipeId: string;
+  boardPartNumber: string;
+  boardRevision: string;
+  specificationVersion: number;
+  status: 'DRAFT' | 'ACTIVE' | 'RETIRED';
+  alloy: 'SAC305' | 'SAC307' | 'SN63PB37' | 'LOW_TEMP_BISMUTH' | string;
+
+  rampRate: {
+    minCPerSec: number;        // e.g. 1.0 °C/s
+    maxCPerSec: number;        // e.g. 3.0 °C/s
+    targetCPerSec?: number;    // Engineering target
+    evaluationStartTempC?: number; // default ambient (30°C)
+    evaluationEndTempC: number;    // e.g. 150°C (soak start)
+  };
+
+  soak: {
+    minTempC: number;          // e.g. 150°C
+    maxTempC: number;          // e.g. 200°C
+    minSeconds: number;        // e.g. 60s
+    maxSeconds: number;        // e.g. 120s
+    targetSeconds?: number;
+  };
+
+  tal: {
+    liquidusTempC: number;     // e.g. 217°C for SAC305
+    minSeconds: number;        // e.g. 45s
+    maxSeconds: number;        // e.g. 90s
+    targetSeconds?: number;
+  };
+
+  peak: {
+    minC: number;              // e.g. 235°C
+    maxC: number;              // e.g. 248°C
+    targetC?: number;
+  };
+
+  cooling: {
+    minCPerSec: number;        // e.g. 1.0 °C/s (positive magnitude required for midpoint PWI)
+    maxCPerSec: number;        // e.g. 4.0 °C/s (positive magnitude)
+    evaluationStartTempC: number; // e.g. peakTemp
+    evaluationEndTempC: number;   // e.g. liquidusTemp
+  };
+
+  conveyorSpeedLimit: {
+    minCmPerMin: number;
+    maxCmPerMin: number;
+    targetCmPerMin: number;
+    toleranceCmPerMin: number; // e.g. ±1.5 cm/min
+  };
+
+  oxygenControl?: {
+    targetPpm: number;         // e.g. 500 ppm
+    tolerancePpm: number;      // e.g. ±100 ppm
+    maxPpm?: number;           // e.g. 800 ppm
+  };
+
+  zoneTolerancesC: number;     // Allowable zone temperature deviation (e.g. ±2.5°C)
+  variabilityLimitC: number;   // Allowable window standard deviation (e.g. 1.2°C)
+  minimumSigmaC: number;       // Baseline variance noise floor (e.g. 0.5°C)
+
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ReflowProfileProbe {
+  id: string;
+  profileRunId: string;
+  probeIndex: number;
+  label: string;
+  thermalRole: 'HOTSPOT' | 'COLDSPOT' | 'COMPONENT_LIMIT' | 'SOLDER_JOINT' | 'BOARD_SURFACE';
+  componentRefDes?: string;
+  packageType?: string;
+  location?: {
+    xMm?: number;
+    yMm?: number;
+    side: 'TOP' | 'BOTTOM';
+  };
+  calibration: {
+    calibrationOffsetC?: number;
+    calibrationSource: 'VENDOR_FILE' | 'MANUAL' | 'NONE';
+  };
+  metrics: {
+    maxRampRateCPerSec: number;
+    soakDurationSeconds: number;
+    timeAboveLiquidusSeconds: number;
+    peakTemperatureC: number;
+    maxCoolingRateCPerSec: number;
+  };
+  pwi: {
+    overall: number;
+    ramp: number;
+    soak: number;
+    tal: number;
+    peak: number;
+    cooling: number;
+  };
+  samples: {
+    timeSeconds: number;
+    temperatureC: number;
+  }[];
+}
+
+export interface ReflowProfileRun {
+  id: string;
+  applicabilityKey: {
+    lineId: string;
+    equipmentId: string;
+    recipeId: string;
+    boardPartNumber: string;
+    boardRevision: string;
+  };
+  fileMetadata: {
+    originalFileName: string;
+    fileSizeBytes: number;
+    fileSha256: string;
+    vendorFormat: 'KIC' | 'DATAPAQ' | 'MOLE' | 'GENERIC_CSV';
+    uploadedAt: string;
+    uploadedBy: string;
+  };
+  profilerHardware: {
+    manufacturer: string;
+    model: string;
+    serialNumber: string;
+    totalProbesUsed: number;
+    sampleIntervalSeconds: number;
+    sampleCount: number;
+  };
+  ovenSettingsSnapshot?: {
+    recipeName: string;
+    conveyorSpeedCmPerMin: number;
+    zoneSetpointsC: number[];
+  };
+  specificationReference: {
+    specificationId: string;
+    specificationVersion: number;
+    alloy: string;
+  };
+  analysisResult: {
+    calculationVersion: string;
+    overallPwi: number;
+    worstProbeIndex: number;
+    worstCharacteristic: 'RAMP' | 'SOAK' | 'TAL' | 'PEAK' | 'COOLING';
+    complianceResult: 'PASS' | 'WARNING' | 'FAIL';
+    evaluatedAt: string;
+  };
+  status: 'UPLOADED' | 'PARSED' | 'PARSE_FAILED' | 'VALIDATED' | 'VALIDATION_FAILED' | 'REVIEW_REQUIRED' | 'APPROVED' | 'REJECTED' | 'ACTIVE' | 'RETIRED';
+  approvalAudit?: {
+    approvedBy: string;
+    approvedAt: string;
+    comments?: string;
+    electronicSignature?: {
+      signerName: string;
+      signerRole: string;
+      meaning: string;
+      timestamp: string;
+    };
+  };
+  activatedAt?: string;
+  retiredAt?: string;
+}
+
+export interface CalculatedProfilePwi {
+  overallPwi: number;
+  worstProbeIndex: number;
+  worstCharacteristic: 'RAMP' | 'SOAK' | 'TAL' | 'PEAK' | 'COOLING';
+  complianceResult: 'PASS' | 'WARNING' | 'FAIL';
+  processMarginPct: number;
+  probes: Array<{
+    probeIndex: number;
+    label: string;
+    metrics: ReflowProfileProbe['metrics'];
+    pwi: ReflowProfileProbe['pwi'];
+  }>;
+}
+
+export interface ZoneDriftMetric {
+  zoneIndex: number;
+  zoneName: string;
+  windowMeanC: number;
+  windowStdDevC: number;
+  baselineMeanC: number;
+  baselineStdDevC: number;
+  meanDeviationC: number;
+  meanZScore: number;
+  variabilityZScore: number;
+  isDrifting: boolean;
+}
+
+export interface OvenDriftReport {
+  lineId: string;
+  equipmentId: string;
+  recipeId: string;
+  boardPartNumber: string;
+  boardRevision: string;
+  activeProfileRunId: string;
+  timestamp: string;
+  isCompliant: boolean;
+  driftType?: 'MEAN_SHIFT' | 'VARIANCE_INSTABILITY' | 'CONVEYOR_SPEED_DRIFT' | 'OXYGEN_EXCURSION' | 'MULTI_ZONE_COLLAPSE';
+  compositeSeverityScore: number;
+  consecutiveDriftSeconds: number;
+  zones: ZoneDriftMetric[];
+  conveyorSpeed?: {
+    windowMeanCmPerMin: number;
+    baselineCmPerMin: number;
+    deviationCmPerMin: number;
+    isDrifting: boolean;
+  };
+  oxygen?: {
+    windowMeanPpm: number;
+    baselinePpm: number;
+    deviationPpm: number;
+    isDrifting: boolean;
+  };
+}
+
+export interface ThermalImpactEstimate {
+  estimatedPeakDeltaC?: number;
+  estimatedTalDeltaSeconds?: number;
+  confidence: number; // 0.0 to 1.0
+  basis: 'EMPIRICAL' | 'MODEL' | 'RULE_BASED' | 'UNKNOWN';
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+export interface ProfileTelemetryCorrelation {
+  profileRunId: string;
+  lineId: string;
+  equipmentId: string;
+  windowStart: string;
+  windowEnd: string;
+  sampleCount: number;
+  telemetryIntegrityScore: number; // 0.0 to 1.0
+  zones: Array<{
+    zoneIndex: number;
+    zoneName: string;
+    meanC: number;
+    stdDevC: number;
+    minC: number;
+    maxC: number;
+  }>;
+  conveyorSpeed: {
+    meanCmPerMin: number;
+    stdDevCmPerMin: number;
+    minCmPerMin: number;
+    maxCmPerMin: number;
+  };
+  oxygen?: {
+    meanPpm: number;
+    stdDevPpm: number;
+    minPpm: number;
+    maxPpm: number;
+  };
+}
+
+export interface ReflowProcessState {
+  lineId: string;
+  equipmentId: string;
+  recipeId: string;
+  boardPartNumber: string;
+  boardRevision: string;
+  activeProfileRunId?: string;
+  complianceStatus: 'COMPLIANT' | 'DRIFT_SUSPECTED' | 'DRIFT_CONFIRMED' | 'REVALIDATION_REQUIRED' | 'DATA_INSUFFICIENT';
+  consecutiveDriftSeconds: number;
+  consecutiveHealthySeconds: number;
+  lastEvaluatedAt: string;
+  driftReport?: OvenDriftReport;
+}
+
+
 
