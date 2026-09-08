@@ -86,7 +86,8 @@ export interface IReflowProfilingModule {
     lineId: string;
     equipmentId: string;
     recipeId: string;
-    boardRevision?: string;
+    boardPartNumber: string;
+    boardRevision: string;
   }): Promise<ReflowProfileRun | null>;
   getProfileRunById(profileRunId: string): Promise<ReflowProfileRun | null>;
 
@@ -150,9 +151,13 @@ A physical profiler pass is an immutable historical measurement. Its status trac
              │ [Superseded by New Active Run]
              ▼
       ┌──────────────┐
-      │   RETIRED    │ (Immutable historical archive)
+      │    RETIRED    │ (Immutable historical archive)
       └──────────────┘
 ```
+
+> [!IMPORTANT]
+> **PWI-FAIL Activation Guard Invariant**:
+> A profile run with `complianceResult === 'FAIL'` ($PWI > 100\%$) may legitimately transition to `REVIEW_REQUIRED` (and can be formally `REJECTED` by QA), but **CANNOT transition to `ACTIVE`**. Any call to `activateProfileRun()` on a run with $PWI > 100\%$ throws a deterministic domain error: `CANNOT_ACTIVATE_NON_COMPLIANT_PROFILE`. Only runs with $PWI \le 100\%$ (`PASS` or `WARNING`) are eligible for production baseline activation.
 
 ### B. Process Compliance State (Continuous Real-Time Monitoring)
 
@@ -238,7 +243,7 @@ export interface ReflowThermalSpecification {
   };
 
   cooling: {
-    minCPerSec?: number;       // e.g. 1.0 °C/s (positive magnitude)
+    minCPerSec: number;        // e.g. 1.0 °C/s (positive magnitude, required for midpoint PWI)
     maxCPerSec: number;        // e.g. 4.0 °C/s (positive magnitude)
     evaluationStartTempC: number; // e.g. peakTemp
     evaluationEndTempC: number;   // e.g. liquidusTemp
@@ -249,6 +254,12 @@ export interface ReflowThermalSpecification {
     maxCmPerMin: number;
     targetCmPerMin: number;
     toleranceCmPerMin: number; // e.g. ±1.5 cm/min
+  };
+
+  oxygenControl?: {
+    targetPpm: number;         // e.g. 500 ppm
+    tolerancePpm: number;      // e.g. ±100 ppm
+    maxPpm: number;            // e.g. 800 ppm (interlock threshold)
   };
 
   zoneTolerancesC: number;     // Allowable zone temperature deviation (e.g. ±2.5°C)
@@ -406,7 +417,7 @@ CREATE TABLE reflow_profile_runs (
 
 -- Partial Unique Index guaranteeing at most one active profile baseline per scope
 CREATE UNIQUE INDEX idx_reflow_profile_active_scope 
-ON reflow_profile_runs(line_id, equipment_id, recipe_id, board_revision) 
+ON reflow_profile_runs(line_id, equipment_id, recipe_id, board_part_number, board_revision) 
 WHERE status = 'ACTIVE';
 
 -- Profile Probes & Measurements
@@ -426,13 +437,15 @@ CREATE TABLE reflow_process_states (
   line_id VARCHAR(64) NOT NULL,
   equipment_id VARCHAR(64) NOT NULL,
   recipe_id VARCHAR(64) NOT NULL,
+  board_part_number VARCHAR(64) NOT NULL,
+  board_revision VARCHAR(32) NOT NULL,
   active_profile_run_id VARCHAR(64),
   compliance_status VARCHAR(32) NOT NULL, -- COMPLIANT, DRIFT_SUSPECTED, DRIFT_CONFIRMED, REVALIDATION_REQUIRED, DATA_INSUFFICIENT
   consecutive_drift_seconds REAL NOT NULL DEFAULT 0.0,
   consecutive_healthy_seconds REAL NOT NULL DEFAULT 0.0,
   last_evaluated_at TIMESTAMP NOT NULL,
   drift_metrics_json TEXT NOT NULL,
-  PRIMARY KEY(line_id, equipment_id, recipe_id)
+  PRIMARY KEY(line_id, equipment_id, recipe_id, board_part_number, board_revision)
 );
 ```
 
