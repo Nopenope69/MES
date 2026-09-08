@@ -14,6 +14,10 @@ import { complianceRouter } from './routes/compliance.router';
 import { sreRouter } from './routes/sre.router';
 import { aoiRouter } from './routes/aoi.router';
 import { spiRouter } from './routes/spi.router';
+import { fleetRouter } from './routes/fleet.router';
+import { logisticsRouter } from './routes/logistics.router';
+import { predictiveRouter } from './routes/predictive.router';
+import { reflowRouter } from './routes/reflow.router';
 import { MetricsService } from './services/metrics.service';
 import { FujiNeximAdapter } from './adapters/fuji-nexim.adapter';
 import { MachineControlModule } from './modules/machine-control';
@@ -32,7 +36,7 @@ const spliceRateLimiter = new SimpleRateLimiter(60000, 100);
 // Enterprise Security Hardening Middleware
 app.use(securityHeadersMiddleware);
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '20mb' }));
 app.use('/api/v1/smt/splice-verify', spliceRateLimiter.middleware());
 
 // HTTP RED Metrics Middleware
@@ -58,6 +62,10 @@ app.use('/api/v1/compliance', complianceRouter);
 app.use('/api/v1/sre', sreRouter);
 app.use('/api/v1/aoi', aoiRouter);
 app.use('/api/v1/spi', spiRouter);
+app.use('/api/v1/fleet', fleetRouter);
+app.use('/api/v1/logistics', logisticsRouter);
+app.use('/api/v1/predictive', predictiveRouter);
+app.use('/api/v1/reflow', reflowRouter);
 
 // Prometheus Metrics Endpoint
 app.get('/metrics', (_req, res) => {
