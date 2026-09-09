@@ -259,5 +259,32 @@ export async function initDatabase(): Promise<void> {
     `);
   } catch {}
 
+  // Tenant & Site Scoping Migrations (Section 1)
+  try {
+    await db.execute("ALTER TABLE batches ADD COLUMN organization_id VARCHAR(64) DEFAULT 'org-dixon';");
+  } catch {}
+  try {
+    await db.execute("ALTER TABLE batches ADD COLUMN site_id VARCHAR(64) DEFAULT 'site-noida-p4';");
+  } catch {}
+
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS organization_settings (
+        organization_id VARCHAR(64) NOT NULL,
+        setting_key VARCHAR(64) NOT NULL,
+        setting_value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (organization_id, setting_key)
+      );
+    `);
+  } catch {}
+
   console.log('[DB] Schema verified and initialized.');
 }
+
+export class DatabaseManager {
+  public static getInstance(): IDatabase {
+    return getDatabase();
+  }
+}
+
