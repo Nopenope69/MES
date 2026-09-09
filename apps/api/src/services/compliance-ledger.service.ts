@@ -1,14 +1,40 @@
+// apps/api/src/services/compliance-ledger.service.ts
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase, IDatabase } from '../db/database';
+import { canonicalizeJson } from '../security/canonical-json';
+import { PinPolicy } from '../security/pin-policy';
+import { RequestContext } from '../security/context';
+
+export interface SignedEnvelope {
+  sequenceNumber: number;
+  previousHash: string;
+  actorId: string;
+  actorRole: string;
+  actionType: string;
+  meaning: string;
+  reason: string;
+  entityType: string;
+  entityId: string;
+  entityRevision: number;
+  organizationId: string;
+  siteId: string;
+  metadata: Record<string, any>;
+  signedAt: string;
+}
 
 export interface ComplianceLedgerEntryInput {
-  actorId: string;
-  actorRole: string; // e.g. QA_DIRECTOR, SMT_OPERATOR, SHIFT_SUPERVISOR
-  actionType: string; // e.g. QUALITY_GATE_OVERRIDE, DHR_SIGN_OFF, MSL_BAKE_RESET, BATCH_RELEASE
-  meaning: string; // e.g. "I verify this PCBA batch satisfies IPC-A-610 Class 3 acceptance criteria"
-  entityType: 'REEL' | 'BATCH' | 'PASTE_JAR' | 'STENCIL' | 'WORK_ORDER' | 'DHR';
+  actorId?: string;
+  actorRole?: string;
+  actionType: string;
+  meaning: string;
+  reason?: string;
+  entityType: string;
   entityId: string;
+  entityRevision?: number;
+  organizationId?: string;
+  siteId?: string;
+  signingPin?: string;
   metadata?: Record<string, any>;
 }
 
@@ -21,10 +47,15 @@ export interface ComplianceLedgerRecord {
   actorRole: string;
   actionType: string;
   meaning: string;
+  reason: string;
   entityType: string;
   entityId: string;
+  entityRevision: number;
+  organizationId: string;
+  siteId: string;
   metadata: Record<string, any>;
   signedAt: string;
+  envelope?: SignedEnvelope;
 }
 
 export interface LedgerVerificationResult {
@@ -39,17 +70,72 @@ export interface LedgerVerificationResult {
 const GENESIS_HASH = '0'.repeat(64);
 
 /**
- * ComplianceLedgerService (Track B: 21 CFR Part 11 & ISO 13485 Audit Trail)
+ * ComplianceLedgerService (21 CFR Part 11 & ISO 13485 Audit Trail)
  *
  * Implements an immutable, cryptographically hash-chained audit ledger.
  * Every compliance-critical signature or quality gate override is chained to the
- * preceding record via SHA-256, guaranteeing tamper-evident forensic integrity.
+ * preceding record via RFC 8785 canonical JSON and SHA-256, guaranteeing tamper-evident
+ * forensic integrity.
  */
 export class ComplianceLedgerService {
   /**
-   * Computes the SHA-256 digest for a given ledger record.
+   * Computes the deterministic SHA-256 digest of a canonical signed envelope per RFC 8785.
+   */
+  public static computeEnvelopeHash(envelope: SignedEnvelope): string {
+    return crypto.createHash('sha256').update(canonicalizeJson(envelope), 'utf-8').digest('hex');
+  }
+
+  /**
+   * Backwards-compatible SHA-256 compute hash function.
    */
   public static computeHash(
+    sequenceNumber: number,
+    previousHash: string,
+    actorId: string,
+    actionType: string,
+    meaning: string,
+    entityType: string,
+    entityId: string,
+    metadataJson: string,
+    signedAt: string
+  ): string {
+    let metaObj: any = {};
+    try {
+      metaObj = JSON.parse(metadataJson || '{}');
+    } catch {
+      metaObj = {};
+    }
+
+    const reason = metaObj.reason || meaning;
+    const entityRevision = metaObj.entityRevision || 1;
+    const organizationId = metaObj.organizationId || 'org-dixon';
+    const siteId = metaObj.siteId || 'site-noida-p4';
+    const metadata = metaObj.metadata !== undefined ? metaObj.metadata : metaObj;
+
+    const envelope: SignedEnvelope = {
+      sequenceNumber,
+      previousHash,
+      actorId,
+      actorRole: 'OPERATOR',
+      actionType,
+      meaning,
+      reason,
+      entityType,
+      entityId,
+      entityRevision,
+      organizationId,
+      siteId,
+      metadata,
+      signedAt
+    };
+
+    return this.computeEnvelopeHash(envelope);
+  }
+
+  /**
+   * Computes the pre-Task-5 pipe-delimited SHA-256 hash for historical audit records.
+   */
+  public static computeLegacyHash(
     sequenceNumber: number,
     previousHash: string,
     actorId: string,
@@ -66,12 +152,78 @@ export class ComplianceLedgerService {
 
   /**
    * Append a 21 CFR Part 11 compliant signed record to the cryptographic ledger.
+   *
+   * Enforces two-component electronic signature:
+   * - Component 1: Authoritative session RequestContext (actorId, actorRole, organizationId, siteId).
+   * - Component 2: Immediate operator PIN re-authentication verified against operator's pin_hash.
    */
-  public static async recordSignature(input: ComplianceLedgerEntryInput): Promise<ComplianceLedgerRecord> {
+  public static async recordSignature(
+    input: ComplianceLedgerEntryInput,
+    context?: RequestContext
+  ): Promise<ComplianceLedgerRecord> {
     const db = getDatabase();
+    let actorId: string;
+    let actorRole: string;
+    let organizationId: string;
+    let siteId: string;
+
+    if (context && context.principal) {
+      // Component 1: Attributable session identity from RequestContext
+      actorId = context.principal.id || (context.principal as any).operatorId || (context.principal as any).serviceId;
+      actorRole = context.principal.role || (context.principal as any).serviceName || 'OPERATOR';
+      organizationId =
+        context.scope?.organizationId ||
+        (context.principal as any).organizationId ||
+        (context.principal as any).scope?.organizationId ||
+        'org-dixon';
+      siteId =
+        context.scope?.siteId ||
+        (context.principal as any).siteId ||
+        (context.principal as any).scope?.siteId ||
+        'site-noida-p4';
+
+      // Component 2: Operator PIN re-authentication secret
+      const signingPin = input.signingPin;
+      if (!signingPin) {
+        throw new Error('INVALID_SIGNING_PIN');
+      }
+
+      const opRows = await db.query<any>(
+        'SELECT pin, pin_hash FROM operators WHERE id = ? OR code = ?',
+        [actorId, actorId]
+      );
+
+      if (opRows.length === 0) {
+        await PinPolicy.verifyUnknownOperator(signingPin);
+        throw new Error('INVALID_SIGNING_PIN');
+      }
+
+      const storedHash = opRows[0].pin_hash || opRows[0].pin;
+      const isValid = await PinPolicy.verifyPin(signingPin, storedHash);
+      if (!isValid) {
+        throw new Error('INVALID_SIGNING_PIN');
+      }
+    } else {
+      // Legacy backwards-compatibility for direct service callers (e.g. EdhrService or legacy tests)
+      actorId = input.actorId || 'SYSTEM';
+      actorRole = input.actorRole || 'SYSTEM_AUDITOR';
+      organizationId = input.organizationId || 'org-dixon';
+      siteId = input.siteId || 'site-noida-p4';
+    }
+
+    const reason = input.reason || input.meaning;
+    const entityRevision = input.entityRevision !== undefined ? Number(input.entityRevision) : 1;
+    const metadata = input.metadata || {};
     const id = uuidv4();
-    const metadataJson = JSON.stringify(input.metadata || {});
     const now = new Date().toISOString();
+
+    const storedMetadataJson = JSON.stringify({
+      reason,
+      entityRevision,
+      organizationId,
+      siteId,
+      metadata
+    });
 
     return await db.withTransaction(async (tx: IDatabase) => {
       // Fetch latest block to get previous hash and next sequence number
@@ -87,60 +239,76 @@ export class ComplianceLedgerService {
         prevHash = latestRows[0].current_hash;
       }
 
-      const currentHash = this.computeHash(
-        nextSeq,
-        prevHash,
-        input.actorId,
-        input.actionType,
-        input.meaning,
-        input.entityType,
-        input.entityId,
-        metadataJson,
-        now
-      );
+      const envelope: SignedEnvelope = {
+        sequenceNumber: nextSeq,
+        previousHash: prevHash,
+        actorId,
+        actorRole,
+        actionType: input.actionType,
+        meaning: input.meaning,
+        reason,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        entityRevision,
+        organizationId,
+        siteId,
+        metadata,
+        signedAt: now
+      };
 
-      await tx.execute(`
+      const currentHash = this.computeEnvelopeHash(envelope);
+
+      await tx.execute(
+        `
         INSERT INTO compliance_audit_ledger (
           id, sequence_number, previous_hash, current_hash, actor_id, actor_role,
           action_type, meaning, entity_type, entity_id, metadata_json, signed_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        id,
-        nextSeq,
-        prevHash,
-        currentHash,
-        input.actorId,
-        input.actorRole,
-        input.actionType,
-        input.meaning,
-        input.entityType,
-        input.entityId,
-        metadataJson,
-        now
-      ]);
+      `,
+        [
+          id,
+          nextSeq,
+          prevHash,
+          currentHash,
+          actorId,
+          actorRole,
+          input.actionType,
+          input.meaning,
+          input.entityType,
+          input.entityId,
+          storedMetadataJson,
+          now
+        ]
+      );
 
       return {
         id,
         sequenceNumber: nextSeq,
         previousHash: prevHash,
         currentHash,
-        actorId: input.actorId,
-        actorRole: input.actorRole,
+        actorId,
+        actorRole,
         actionType: input.actionType,
         meaning: input.meaning,
+        reason,
         entityType: input.entityType,
         entityId: input.entityId,
-        metadata: input.metadata || {},
-        signedAt: now
+        entityRevision,
+        organizationId,
+        siteId,
+        metadata,
+        signedAt: now,
+        envelope
       };
     });
   }
 
   /**
    * Verify the cryptographic integrity of the entire compliance ledger.
-   * Detects record deletions, in-place tampering, and out-of-order mutations.
+   * Walks the chain from Genesis to Block N, checking for sequence gaps, pointer mismatches,
+   * or altered payload checksums via RFC 8785 canonical JSON.
    */
-  public static async verifyIntegrity(): Promise<LedgerVerificationResult> {
+  public static async verifyLedgerIntegrity(): Promise<LedgerVerificationResult> {
     const db = getDatabase();
     const rows = await db.query<any>(
       'SELECT * FROM compliance_audit_ledger ORDER BY sequence_number ASC'
@@ -160,7 +328,7 @@ export class ComplianceLedgerService {
       const row = rows[i];
       const seq = Number(row.sequence_number);
 
-      // Verify sequence continuity (1, 2, 3...)
+      // 1. Verify sequence continuity (1, 2, 3...)
       if (seq !== i + 1) {
         return {
           valid: false,
@@ -170,7 +338,7 @@ export class ComplianceLedgerService {
         };
       }
 
-      // Verify previous hash pointer
+      // 2. Verify previous hash pointer
       if (row.previous_hash !== expectedPrevHash) {
         return {
           valid: false,
@@ -182,8 +350,51 @@ export class ComplianceLedgerService {
         };
       }
 
-      // Recompute and verify current block hash
-      const recomputedHash = this.computeHash(
+      // 3. Extract metadata fields
+      let metaObj: any = {};
+      try {
+        metaObj = JSON.parse(row.metadata_json || '{}');
+      } catch {
+        metaObj = {};
+      }
+
+      const reason = metaObj.reason !== undefined ? metaObj.reason : (metaObj._reason || row.meaning);
+      const entityRevision = metaObj.entityRevision !== undefined ? Number(metaObj.entityRevision) : 1;
+      const organizationId = metaObj.organizationId || metaObj._organizationId || 'org-dixon';
+      const siteId = metaObj.siteId || metaObj._siteId || 'site-noida-p4';
+      const metadata = metaObj.metadata !== undefined ? metaObj.metadata : metaObj;
+
+      const signedAt =
+        typeof row.signed_at === 'object' && row.signed_at instanceof Date
+          ? row.signed_at.toISOString()
+          : String(row.signed_at);
+
+      const envelope: SignedEnvelope = {
+        sequenceNumber: seq,
+        previousHash: row.previous_hash,
+        actorId: row.actor_id,
+        actorRole: row.actor_role,
+        actionType: row.action_type,
+        meaning: row.meaning,
+        reason,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        entityRevision,
+        organizationId,
+        siteId,
+        metadata,
+        signedAt
+      };
+
+      // 4. Recompute canonical SHA-256 hash
+      const recomputedCanonicalHash = this.computeEnvelopeHash(envelope);
+      if (recomputedCanonicalHash === row.current_hash) {
+        expectedPrevHash = row.current_hash;
+        continue;
+      }
+
+      // Backward-compatibility: Check legacy hash format for pre-Task-5 records
+      const legacyHash = this.computeLegacyHash(
         seq,
         row.previous_hash,
         row.actor_id,
@@ -192,21 +403,23 @@ export class ComplianceLedgerService {
         row.entity_type,
         row.entity_id,
         row.metadata_json,
-        row.signed_at
+        signedAt
       );
 
-      if (recomputedHash !== row.current_hash) {
-        return {
-          valid: false,
-          totalEntries: rows.length,
-          brokenSequence: seq,
-          expectedHash: recomputedHash,
-          actualHash: row.current_hash,
-          message: `Data tampering detected at block ${seq}: cryptographic SHA-256 payload checksum mismatch!`
-        };
+      if (legacyHash === row.current_hash) {
+        expectedPrevHash = row.current_hash;
+        continue;
       }
 
-      expectedPrevHash = row.current_hash;
+      // Neither hash matched - data tampering detected!
+      return {
+        valid: false,
+        totalEntries: rows.length,
+        brokenSequence: seq,
+        expectedHash: recomputedCanonicalHash,
+        actualHash: row.current_hash,
+        message: `Data tampering detected at block ${seq}: cryptographic SHA-256 payload checksum mismatch!`
+      };
     }
 
     return {
@@ -214,6 +427,36 @@ export class ComplianceLedgerService {
       totalEntries: rows.length,
       message: `Verified all ${rows.length} ledger blocks. Zero tampering detected. 21 CFR Part 11 compliant unbroken hash chain.`
     };
+  }
+
+  /**
+   * Alias for verifyLedgerIntegrity for backwards compatibility.
+   */
+  public static async verifyIntegrity(): Promise<LedgerVerificationResult> {
+    return this.verifyLedgerIntegrity();
+  }
+
+  /**
+   * Safeguard prohibiting record mutation or deletion on compliance ledger records.
+   */
+  public static prohibitRecordMutation(action: 'UPDATE' | 'DELETE' | string = 'MUTATE'): never {
+    throw new Error(
+      `LEDGER_MUTATION_PROHIBITED: Cannot ${action} records in compliance_audit_ledger. 21 CFR Part 11 requires immutable append-only storage.`
+    );
+  }
+
+  /**
+   * Prohibited update operation.
+   */
+  public static async updateRecord(): Promise<never> {
+    this.prohibitRecordMutation('UPDATE');
+  }
+
+  /**
+   * Prohibited delete operation.
+   */
+  public static async deleteRecord(): Promise<never> {
+    this.prohibitRecordMutation('DELETE');
   }
 
   /**
@@ -226,19 +469,41 @@ export class ComplianceLedgerService {
       [entityType, entityId]
     );
 
-    return rows.map(r => ({
-      id: r.id,
-      sequenceNumber: Number(r.sequence_number),
-      previousHash: r.previous_hash,
-      currentHash: r.current_hash,
-      actorId: r.actor_id,
-      actorRole: r.actor_role,
-      actionType: r.action_type,
-      meaning: r.meaning,
-      entityType: r.entity_type,
-      entityId: r.entity_id,
-      metadata: JSON.parse(r.metadata_json || '{}'),
-      signedAt: r.signed_at
-    }));
+    return rows.map((r) => {
+      let metaObj: any = {};
+      try {
+        metaObj = JSON.parse(r.metadata_json || '{}');
+      } catch {
+        metaObj = {};
+      }
+
+      const reason = metaObj.reason !== undefined ? metaObj.reason : (metaObj._reason || r.meaning);
+      const entityRevision = metaObj.entityRevision !== undefined ? Number(metaObj.entityRevision) : 1;
+      const organizationId = metaObj.organizationId || metaObj._organizationId || 'org-dixon';
+      const siteId = metaObj.siteId || metaObj._siteId || 'site-noida-p4';
+      const metadata = metaObj.metadata !== undefined ? metaObj.metadata : metaObj;
+
+      return {
+        id: r.id,
+        sequenceNumber: Number(r.sequence_number),
+        previousHash: r.previous_hash,
+        currentHash: r.current_hash,
+        actorId: r.actor_id,
+        actorRole: r.actor_role,
+        actionType: r.action_type,
+        meaning: r.meaning,
+        reason,
+        entityType: r.entity_type,
+        entityId: r.entity_id,
+        entityRevision,
+        organizationId,
+        siteId,
+        metadata,
+        signedAt:
+          typeof r.signed_at === 'object' && r.signed_at instanceof Date
+            ? r.signed_at.toISOString()
+            : String(r.signed_at)
+      };
+    });
   }
 }

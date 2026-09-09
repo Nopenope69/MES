@@ -15,6 +15,7 @@ export type ServiceScope =
 export type SecurityPrincipal =
   | {
       readonly kind: 'HUMAN';
+      readonly id: string;
       readonly operatorId: string;
       readonly operatorCode: string;
       readonly role: OperatorRole;
@@ -25,8 +26,10 @@ export type SecurityPrincipal =
     }
   | {
       readonly kind: 'SERVICE';
+      readonly id: string;
       readonly serviceId: string;
       readonly serviceName: string;
+      readonly role?: OperatorRole;
       readonly scope: ServiceScope;
       readonly permissions: ReadonlySet<string>;
       readonly credentialId: string;
@@ -34,6 +37,7 @@ export type SecurityPrincipal =
 
 export interface RequestContext {
   readonly principal: SecurityPrincipal;
+  readonly scope?: { readonly organizationId: string; readonly siteId: string };
   readonly correlationId: string;
   readonly requestId: string;
   readonly ipAddress: string;

@@ -1,14 +1,46 @@
 import { Router, Request, Response } from 'express';
 import { ComplianceLedgerService } from '../services/compliance-ledger.service';
+import { ComplianceController } from '../controllers/compliance.controller';
 import { EdhrService } from '../services/edhr.service';
 import { TraceabilityInterrogationService } from '../services/traceability-interrogation.service';
 import { apiKeyAuth } from '../security/http-security';
+import { authenticateToken } from '../middleware/auth.middleware';
 
 export const complianceRouter = Router();
 
 /**
+ * POST /api/v1/compliance/sign
+ * Attributable 21 CFR Part 11 Two-Component Electronic Signature
+ */
+complianceRouter.post('/sign', authenticateToken, ComplianceController.signLedgerEntry);
+
+/**
+ * PUT /api/v1/compliance/ledger/:id
+ * Safeguard: Ledger records are append-only. UPDATE is prohibited per 21 CFR Part 11.
+ */
+complianceRouter.put('/ledger/:id', (_req: Request, res: Response) => {
+  res.status(405).json({
+    success: false,
+    error: 'LEDGER_MUTATION_PROHIBITED',
+    message: 'Compliance ledger is append-only. UPDATE operations are prohibited by 21 CFR Part 11.'
+  });
+});
+
+/**
+ * DELETE /api/v1/compliance/ledger/:id
+ * Safeguard: Ledger records are append-only. DELETE is prohibited per 21 CFR Part 11.
+ */
+complianceRouter.delete('/ledger/:id', (_req: Request, res: Response) => {
+  res.status(405).json({
+    success: false,
+    error: 'LEDGER_MUTATION_PROHIBITED',
+    message: 'Compliance ledger is append-only. DELETE operations are prohibited by 21 CFR Part 11.'
+  });
+});
+
+/**
  * POST /api/v1/compliance/ledger/sign
- * Record an immutable 21 CFR Part 11 compliant digital signature into the SHA-256 chained audit ledger.
+ * Legacy endpoint: record signature into the chained audit ledger.
  */
 complianceRouter.post('/ledger/sign', async (req: Request, res: Response) => {
   try {
@@ -50,7 +82,7 @@ complianceRouter.post('/ledger/sign', async (req: Request, res: Response) => {
  */
 complianceRouter.get('/ledger/verify', async (_req: Request, res: Response) => {
   try {
-    const result = await ComplianceLedgerService.verifyIntegrity();
+    const result = await ComplianceLedgerService.verifyLedgerIntegrity();
     res.json({
       success: true,
       data: result

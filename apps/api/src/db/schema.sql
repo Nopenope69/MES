@@ -475,6 +475,10 @@ CREATE TABLE IF NOT EXISTS compliance_audit_ledger (
   signed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Non-owner runtime role segregation for 21 CFR Part 11 ledger
+-- GRANT SELECT, INSERT ON compliance_audit_ledger TO mes_runtime;
+-- REVOKE UPDATE, DELETE, TRUNCATE ON compliance_audit_ledger FROM mes_runtime;
+
 CREATE INDEX IF NOT EXISTS idx_ledger_sequence ON compliance_audit_ledger(sequence_number);
 CREATE INDEX IF NOT EXISTS idx_ledger_entity ON compliance_audit_ledger(entity_type, entity_id);
 

@@ -56,6 +56,7 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
 
     const principal: SecurityPrincipal = {
       kind: 'HUMAN',
+      id: claims.sub,
       operatorId: claims.sub,
       operatorCode: claims.code,
       role: claims.role as OperatorRole,
@@ -77,6 +78,10 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
 
     req.context = {
       principal,
+      scope: {
+        organizationId: claims.org,
+        siteId: claims.site
+      },
       correlationId: TrustedProxyResolver.resolveCorrelationId(req.headers['x-correlation-id']),
       requestId: TrustedProxyResolver.generateRequestId(),
       ipAddress
@@ -93,8 +98,10 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
       const perms = getPermissionsForRole('SYSTEM_ADMIN');
       const principal: SecurityPrincipal = {
         kind: 'SERVICE',
+        id: 'svc-system',
         serviceId: 'svc-system',
         serviceName: 'System Service Principal',
+        role: 'SYSTEM_ADMIN' as OperatorRole,
         scope: { kind: 'SYSTEM', organizationId: 'org-dixon' },
         permissions: perms,
         credentialId: 'cred-api-key'
@@ -112,6 +119,10 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
 
       req.context = {
         principal,
+        scope: {
+          organizationId: 'org-dixon',
+          siteId: 'site-noida-p4'
+        },
         correlationId: TrustedProxyResolver.resolveCorrelationId(req.headers['x-correlation-id']),
         requestId: TrustedProxyResolver.generateRequestId(),
         ipAddress

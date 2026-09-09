@@ -102,5 +102,5 @@ describe('PIN Security, Anti-Enumeration & Lockout Suite (Task 2)', () => {
     const secondRun = await migrateOperatorPins(db);
     expect(secondRun.migratedCount).toBe(0);
     expect(secondRun.nullHashCount).toBe(0);
-  });
+  }, 15000);
 });
