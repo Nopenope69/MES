@@ -171,7 +171,8 @@ export class MigrationRunner {
     'printer_capabilities',
     'spi_inspections',
     'spi_pad_measurements',
-    'printer_tuning_events'
+    'printer_tuning_events',
+    'dr_drill_history'
   ];
 
   public getSyncTables(): string[] {

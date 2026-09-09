@@ -153,7 +153,9 @@ describe('Track B: Compliance & Industrial Audit Readiness Suite (21 CFR Part 11
 
     // Verify ledger entry was created for the release
     const entries = await ComplianceLedgerService.getEntriesForEntity('DHR', dhrNumber);
-    const releaseEntry = entries.find(e => e.actionType === 'DHR_QA_RELEASE');
+    // Use reverse() to get the most recent DHR_QA_RELEASE — a prior test (track-f) may have
+    // already released this DHR, creating an earlier ledger entry with a different actorId.
+    const releaseEntry = [...entries].reverse().find(e => e.actionType === 'DHR_QA_RELEASE');
     expect(releaseEntry).toBeDefined();
     expect(releaseEntry?.actorId).toBe(qaSignerId);
     expect(releaseEntry?.actorRole).toBe('QA_DIRECTOR');

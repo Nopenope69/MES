@@ -309,6 +309,28 @@ export async function initDatabase(): Promise<void> {
     await db.execute("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id);");
   } catch {}
 
+  // Disaster Recovery Drill History (Section 5 / Task 8)
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS dr_drill_history (
+        drill_id VARCHAR(64) PRIMARY KEY,
+        drill_version VARCHAR(32) NOT NULL,
+        backup_timestamp TIMESTAMP NOT NULL,
+        drill_started_at TIMESTAMP NOT NULL,
+        drill_completed_at TIMESTAMP NOT NULL,
+        rpo_seconds INTEGER NOT NULL,
+        rto_seconds INTEGER NOT NULL,
+        schema_valid INTEGER NOT NULL DEFAULT 0,
+        event_store_valid INTEGER NOT NULL DEFAULT 0,
+        ledger_integrity INTEGER NOT NULL DEFAULT 0,
+        manifest_integrity INTEGER NOT NULL DEFAULT 0,
+        status VARCHAR(32) NOT NULL,
+        failure_reason TEXT
+      );
+    `);
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_dr_drill_status ON dr_drill_history(status, drill_completed_at);");
+  } catch {}
+
   console.log('[DB] Schema verified and initialized.');
 }
 
