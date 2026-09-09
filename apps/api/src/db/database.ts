@@ -279,6 +279,16 @@ export async function initDatabase(): Promise<void> {
     `);
   } catch {}
 
+  // Operator Credentials & Lockout Migrations (Section 2)
+  try { await db.execute("ALTER TABLE operators ADD COLUMN pin_hash VARCHAR(255);"); } catch {}
+  try { await db.execute("ALTER TABLE operators ADD COLUMN failed_login_attempts INTEGER DEFAULT 0;"); } catch {}
+  try { await db.execute("ALTER TABLE operators ADD COLUMN locked_until TIMESTAMP;"); } catch {}
+  try { await db.execute("ALTER TABLE operators ADD COLUMN status VARCHAR(24) DEFAULT 'ACTIVE';"); } catch {}
+  try { await db.execute("ALTER TABLE operators ADD COLUMN last_login_at TIMESTAMP;"); } catch {}
+  try { await db.execute("ALTER TABLE operators ADD COLUMN authz_version INTEGER DEFAULT 1;"); } catch {}
+  try { await db.execute("ALTER TABLE operators ADD COLUMN organization_id VARCHAR(64) DEFAULT 'org-dixon';"); } catch {}
+  try { await db.execute("ALTER TABLE operators ADD COLUMN site_id VARCHAR(64) DEFAULT 'site-noida-p4';"); } catch {}
+
   console.log('[DB] Schema verified and initialized.');
 }
 
