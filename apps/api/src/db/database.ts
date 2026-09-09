@@ -133,6 +133,8 @@ class PostgresDatabase implements IDatabase {
 
 let dbInstance: IDatabase | null = null;
 
+import { EMBEDDED_SCHEMA_SQL } from './schema-sql';
+
 export function getDatabase(): IDatabase {
   if (dbInstance) return dbInstance;
 
@@ -141,7 +143,7 @@ export function getDatabase(): IDatabase {
     console.log('[DB] Connecting to PostgreSQL database...');
     dbInstance = new PostgresDatabase(dbUrl);
   } else {
-    const defaultDbPath = path.resolve(__dirname, '../../mes_local.db');
+    const defaultDbPath = path.resolve(process.cwd(), 'mes_local.db');
     const localDbPath = process.env.SQLITE_DB_PATH || defaultDbPath;
     console.log(`[DB] Using built-in Node SQLite database at: ${localDbPath}`);
     dbInstance = new NodeSqliteDatabase(localDbPath);
@@ -152,10 +154,21 @@ export function getDatabase(): IDatabase {
 
 export async function initDatabase(): Promise<void> {
   const db = getDatabase();
-  const schemaPath = fs.existsSync(path.resolve(__dirname, 'schema.sql'))
-    ? path.resolve(__dirname, 'schema.sql')
-    : path.resolve(__dirname, '../../src/db/schema.sql');
-  const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
+  let schemaSql = EMBEDDED_SCHEMA_SQL;
+  try {
+    const directPath = path.resolve(__dirname, 'schema.sql');
+    const relPath = path.resolve(__dirname, '../../src/db/schema.sql');
+    const cwdPath = path.resolve(process.cwd(), 'schema.sql');
+    if (fs.existsSync(directPath)) {
+      schemaSql = fs.readFileSync(directPath, 'utf-8');
+    } else if (fs.existsSync(relPath)) {
+      schemaSql = fs.readFileSync(relPath, 'utf-8');
+    } else if (fs.existsSync(cwdPath)) {
+      schemaSql = fs.readFileSync(cwdPath, 'utf-8');
+    }
+  } catch {
+    // Graceful fallback to EMBEDDED_SCHEMA_SQL
+  }
   await db.execScript(schemaSql);
   try {
     await db.execute('ALTER TABLE ingress_events ADD COLUMN decoded_payload TEXT;');

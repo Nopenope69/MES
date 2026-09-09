@@ -20,7 +20,7 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+if (require.main === module && process.argv[1] && process.argv[1].includes('run-migrations')) {
   main()
     .then(() => process.exit(0))
     .catch((err) => {

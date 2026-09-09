@@ -1,5 +1,7 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
+import { exec } from 'child_process';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { initDatabase, getDatabase } from './db/database';
@@ -119,6 +121,71 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Static frontend serving if public/dist folder exists
+const possiblePublicDirs = [
+  process.env.PUBLIC_DIR,
+  path.resolve(__dirname, 'public'),
+  path.resolve(process.cwd(), 'public'),
+  path.resolve(__dirname, '../../web/dist'),
+  path.resolve(__dirname, '../web/dist')
+].filter(Boolean) as string[];
+
+for (const dir of possiblePublicDirs) {
+  if (fs.existsSync(dir) && fs.existsSync(path.join(dir, 'index.html'))) {
+    console.log(`[Static] Serving Cleanroom Web Cockpit from: ${dir}`);
+    app.use(express.static(dir));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/metrics') || req.path.startsWith('/health') || req.path.startsWith('/api-docs')) {
+        return next();
+      }
+      res.sendFile(path.join(dir, 'index.html'));
+    });
+    break;
+  }
+}
+
+function printBanner(port: string | number, fujiPort: number) {
+  const line = '='.repeat(80);
+  console.log(`\n${line}`);
+  console.log('   🏭 ANTIGRAVITY SMT CLEANROOM MES - STANDALONE SIMULATOR & WORKSTATION');
+  console.log('   Complete Event-Driven Manufacturing Execution System (Phases 1-6)');
+  console.log(`${line}`);
+  console.log(`  [System Architecture]  TypeScript + Node.js Engine (Dual Dialect SQLite / Postgres)`);
+  console.log(`  [Operating Mode]        STANDALONE EMBEDDED SIMULATOR`);
+  console.log(`  [Local Database]        ${process.env.SQLITE_DB_PATH || path.resolve(process.cwd(), 'mes_local.db')}`);
+  console.log(`  [Cleanroom Cockpit UI]  http://localhost:${port}/`);
+  console.log(`  [Interactive API Docs]  http://localhost:${port}/api-docs`);
+  console.log(`  [OpenAPI 3.1 Spec]      http://localhost:${port}/api/v1/openapi.json`);
+  console.log(`  [Prometheus Metrics]    http://localhost:${port}/metrics`);
+  console.log(`  [Fuji Nexim TCP Port]   tcp://localhost:${fujiPort}`);
+  console.log(`${line}`);
+  console.log('  [AVAILABLE CLEANROOM COCKPIT STATIONS]');
+  console.log('   • Tab 1:  Operator Station        - SMT Assembly Line Execution & Barcode Dispatch');
+  console.log('   • Tab 2:  Supervisor Dashboard    - eBR Electronic Batch Records & Part 11 Sign-off');
+  console.log('   • Tab 3:  Traceability Genealogy  - Deep Component & PCB Panel Genealogy Trees');
+  console.log('   • Tab 4:  Component Splicing      - Feeder Reel Setup, MSL Clocks & Interlocks');
+  console.log('   • Tab 5:  Solder Paste & 3D SPI   - Stencil Lifespan, Inspection & Squeegee Tuning');
+  console.log('   • Tab 6:  3D AOI & Defect Sentinel- Optical Inspection & Repeat Defect Production Halt');
+  console.log('   • Tab 7:  Reflow Profiling (Ph.6) - KIC/Datapaq/MOLE PWI Engine & Oven Drift Actuation');
+  console.log('   • Tab 8:  Autonomous AGV Fleet    - Floor Navigation, Missions & Replenishment Dispatch');
+  console.log('   • Tab 9:  Predictive Intelligence - Weibull Reliability, SPC Cpk & Mahalanobis Distance');
+  console.log('   • Tab 10: SRE & Topology Health   - System RED Metrics, Ingress Pipeline & SLO Status');
+  console.log(`${line}`);
+  console.log('  Press Ctrl+C at any time to gracefully shut down the simulator.\n');
+}
+
+function launchBrowser(url: string) {
+  if (process.env.NO_BROWSER || process.env.CI || process.env.NODE_ENV === 'test') return;
+  const cmd =
+    process.platform === 'win32'
+      ? `start "" "${url}"`
+      : process.platform === 'darwin'
+      ? `open "${url}"`
+      : `xdg-open "${url}"`;
+
+  exec(cmd, () => {});
+}
+
 async function bootstrap() {
   try {
     console.log('[API] Bootstrapping Antigravity SMT MES Engine...');
@@ -144,9 +211,12 @@ async function bootstrap() {
       () => fujiAdapter?.clearProductionHold() ?? Promise.resolve()
     );
 
-    app.listen(PORT, () => {
-      console.log(`[API] MES HTTP Server running on http://localhost:${PORT}`);
+    const server = app.listen(PORT, () => {
+      printBanner(PORT, fujiPort);
+      launchBrowser(`http://localhost:${PORT}`);
     });
+
+    return server;
   } catch (err) {
     console.error('[API] Bootstrapping failed:', err);
     process.exit(1);
@@ -157,4 +227,4 @@ if (require.main === module) {
   bootstrap();
 }
 
-export { app, fujiAdapter };
+export { app, fujiAdapter, bootstrap };

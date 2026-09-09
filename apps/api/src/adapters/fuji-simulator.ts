@@ -179,7 +179,7 @@ export class FujiSmtSimulator {
   }
 }
 
-if (require.main === module) {
+if (require.main === module && process.argv[1] && process.argv[1].includes('fuji-simulator')) {
   const sim = new FujiSmtSimulator();
   console.log('[Fuji Simulator] Connecting to MES Fuji Gateway on port 30040...');
   sim.connect().then(async () => {

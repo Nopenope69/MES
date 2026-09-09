@@ -696,7 +696,7 @@ export async function seedDatabase(): Promise<void> {
   console.log('[SEED] Dixon SMT Multi-Line Facility (Line 01 & Line 02) successfully seeded with Phase 5 & Phase 6 fixtures.');
 }
 
-if (require.main === module) {
+if (require.main === module && process.argv[1] && (process.argv[1].endsWith('seed.ts') || process.argv[1].endsWith('seed.js') || process.argv[1].includes('seed'))) {
   seedDatabase()
     .then(() => process.exit(0))
     .catch((err) => {
