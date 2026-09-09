@@ -1,7 +1,7 @@
 # VigilOne MES — Customer-Site Readiness, Security Hardening & Enterprise Appliance Specification
 **Document ID:** SPEC-VIGILONE-2026-01  
 **Target Release:** VigilOne v1.0.0 (Production Customer Release)  
-**Status:** APPROVED & LOCKED  
+**Status:** APPROVED & FROZEN  
 **Date:** 2026-09-09  
 
 ---
@@ -11,14 +11,14 @@
 An exhaustive, independent static code and architecture audit of the **Antigravity SMT MES Engine** evaluated its readiness for commercial customer deployment on Fuji NXT / EMS surface-mount lines.
 
 ### The Audit Verdict
-* **Domain Engine**: **VERIFIED & STRONG (~7.0–8.5/10)**. Real SMT domain depth: JEDEC J-STD-033D MSL floor-life tracking, closed-loop splicing BOM interlocks, IPC-CFX printer auto-tuning, high-frequency reflow oven telemetry/PWI calculation, and defensive Fuji TCP socket framing.
+* **Domain Engine**: **VERIFIED & STRONG (~7.0–8.5/10)**. Genuine SMT domain depth: JEDEC J-STD-033D MSL floor-life tracking, closed-loop splicing BOM interlocks, IPC-CFX printer auto-tuning, high-frequency reflow oven telemetry/PWI calculation, and defensive Fuji TCP socket framing.
 * **Security & Enterprise Readiness**: **CRITICAL DEFICIENCIES (1.5/10)**. No authentication on 54/55 endpoints; unauthenticated, forgeable 21 CFR Part 11 e-signatures; unenforced tenant/site isolation; plaintext operator PINs; unauthenticated `/security/audit` disclosure; default Compose credentials and exposed Adminer; bypassed CI security gates (`npm audit || true`); and zero backup/disaster recovery mechanism.
 * **Composite Baseline Score**: **~4.3 / 10** (Disqualified from commercial sale or deployment without remediation).
 
 ### The Strategic Directive
 > **"Do not rewrite the SMT manufacturing core or convert VigilOne into a multi-million-line generic ERP/MES like Siemens Opcenter. Harden the perimeter, establish trustworthy identity, make recovery real, prove it under test, and productize deployment as a dedicated single-tenant, single-plant edge appliance."**
 
-This specification establishes the technical architecture, security invariants, data schemas, API contracts, and verification gates required to systematically elevate every audit dimension to **$\ge 8.5\text{ / }10$** (composite score **$\ge 9.2\text{ / }10$**).
+This specification establishes the technical architecture, security invariants, data schemas, API contracts, and verification gates required to systematically elevate every audit dimension to a **Target Readiness Score of $\ge 9.0\text{ / }10$**, subject to independent post-implementation re-audit.
 
 ---
 
@@ -371,7 +371,7 @@ Displays and exports (PDF/eDHR) must render:
 
 ---
 
-## 6. Section 4: Edge Appliance Perimeter, Secrets & OT Hardening
+## 6. Section 4: Edge Appliance Perimeter, Evidentiary Invariants & OT Hardening
 
 ### 6.1 Perimeter Architecture & Docker Hardening (Gate 5)
 * **Adminer Excised**: The open database management tool is permanently removed from all Docker Compose templates.
@@ -379,12 +379,75 @@ Displays and exports (PDF/eDHR) must render:
 * **Zero Default Passwords**: Docker Compose enforces mandatory environment variables (`${POSTGRES_USER:?error}`, `${POSTGRES_PASSWORD:?error}`).
 * **Caddy Gateway**: TLS 1.3 preferred, HSTS, strict CSP, automated HTTP $\rightarrow$ HTTPS redirect. `/metrics` blocked from external LAN.
 
-### 6.2 Secrets Management & Startup Entropy Enforcement (Gate 6)
+### 6.2 Evidentiary Invariants: Media Ingress Isolation & Provenance Chain
+To prevent unauthenticated or synthetic video from entering legal/compliance evidence archives:
+1. **Host RTSP Port 8554 Excised**: Port `8554:8554` is **completely removed from host publishing**. MediaMTX resides exclusively on the private Docker/Camera VLAN network. Cameras are ingested via private RTSP pull.
+2. **Separation of Ingest Credentials**: If external RTSP publishing is required for specialized edge encoders, credentials must be per-stream machine tokens (`stream_id`, `camera_id`, `purpose = 'publish'`, `expires_at`). User session JWTs are strictly forbidden for media ingress.
+3. **Immutable Recording Provenance Structure**:
+   ```typescript
+   export interface RecordedSegmentProvenance {
+     readonly segmentId: string;
+     readonly cameraId: string;
+     readonly streamPath: string;
+     readonly mediaSessionId: string;
+     readonly sourceAddress: string;
+     readonly ingestCredentialId: string;
+     readonly sessionStart: string;
+     readonly sessionEnd: string;
+     readonly segmentHash: string;
+     readonly previousSegmentHash: string;
+     readonly origin: 'AUTHENTICATED_CAMERA' | 'INTERNAL_TEST' | 'IMPORTED_MEDIA' | 'RECOVERED_STREAM';
+   }
+   ```
+   *Hard Evidentiary Invariant*: Segments originating from `INTERNAL_TEST`, `IMPORTED_MEDIA`, or `RECOVERED_STREAM` are cryptographically tagged and can **never** be exported or signed as `AUTHENTICATED_CAMERA` factory evidence.
+
+### 6.3 Irreversible Appliance Bootstrap Lifecycle
+To eliminate persistent setup backdoors, appliance bootstrap is governed by a state machine backed by persistent database state:
+$$\text{UNINITIALIZED} \longrightarrow \text{BOOTSTRAPPING} \longrightarrow \text{INITIALIZED} \longrightarrow \text{BOOTSTRAP\_UNMOUNTED}$$
+- When `operators` table contains $\ge 1$ administrator, the appliance is in `INITIALIZED` state.
+- The `POST /api/v1/auth/bootstrap` route is **completely unmounted** from the Express router in production code. Any incoming request hits the 404/410 terminal gate.
+
+### 6.4 Replay-Resistant Internal Callbacks with Persistent Idempotency
+Internal asynchronous callbacks (e.g. `POST /api/v1/internal/segment-complete`) require cryptographic authentication:
+- `X-Timestamp`: Validated against server time within a $\pm 30\text{s}$ drift window.
+- `X-Nonce`: Validated against a database-backed idempotency table (`internal_callback_nonces`) to prevent replay attacks across process or container restarts:
+  ```sql
+  CREATE TABLE IF NOT EXISTS internal_callback_nonces (
+    nonce VARCHAR(64) PRIMARY KEY,
+    endpoint VARCHAR(128) NOT NULL,
+    received_at TIMESTAMP NOT NULL,
+    expires_at TIMESTAMP NOT NULL
+  );
+  ```
+- `X-Signature`: $\text{HMAC-SHA256}(\text{internalSecret}, \text{timestamp} + \text{nonce} + \text{bodyHash})$.
+
+### 6.5 Same-Origin Routing, Strict CSP & Appliance CA Onboarding
+1. **Zero-CORS Same-Origin Architecture**: Caddy serves the Web Cockpit, `/api/*`, and media streams (`/whep/*`, `/hls/*`) under a single origin (`https://vigilone.local/`). CORS headers are eliminated for internal application traffic.
+2. **Strict Content Security Policy (CSP)**:
+   ```text
+   default-src 'self';
+   script-src 'self';
+   connect-src 'self';
+   media-src 'self' blob: mediastream:;
+   img-src 'self' data: blob:;
+   font-src 'self';
+   object-src 'none';
+   base-uri 'self';
+   frame-ancestors 'none';
+   form-action 'self';
+   ```
+3. **Strict HTTPS (No Port 80 Fallback)**: Port 80 issues an unconditional `301 Moved Permanently` to port 443. Plaintext HTTP traffic is banned.
+4. **Appliance CA Onboarding**:
+   - Appliance exposes its internal CA root certificate for download (`GET /api/v1/security/ca.crt`).
+   - The Cockpit settings screen displays the CA SHA-256 fingerprint for manual verification.
+   - Enterprise deployments support uploading customer PKI certificates.
+
+### 6.6 Secrets Management & Startup Entropy Enforcement (Gate 6)
 * Production startup enforces $\ge 32$ cryptographically secure random bytes for `JWT_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `INTERNAL_API_SECRET`, `COTURN_SECRET`, and `POSTGRES_PASSWORD`.
 * Startup halts with exit code 1 if default or known patterns (`"admin"`, `"secret"`, `"12345"`) are detected.
 * `/api/v1/security/audit` is gated behind `requirePermission(Permission.AUDIT_VIEW)`.
 
-### 6.3 OT/IIoT Perimeter Defense: Fuji Nexim Gateway (Gate 9)
+### 6.7 OT/IIoT Perimeter Defense: Fuji Nexim Gateway (Gate 9)
 1. **Physical & Network Segmentation**: OT interface bound strictly to dedicated machine network. Port 30040 is physically inaccessible from plant office LAN.
 2. **Dynamic Challenge-Response Handshake**:
    - Gateway sends random 256-bit nonce upon connection.
@@ -392,7 +455,7 @@ Displays and exports (PDF/eDHR) must render:
    - Legacy machines without cryptographic firmware fall back strictly to documented compensating controls (isolated OT VLAN + hardware firewall + monitored IP allowlist).
 3. **Defensive Protocol Framing**: 64KB max buffer cap, sync header validation, corrupt length disconnect, 30s idle timeout.
 
-### 6.4 Egress Security & Socket Connection Pinning (Gate 8)
+### 6.8 Egress Security & Socket Connection Pinning (Gate 8)
 - **Class-Based Egress Policy**:
   - ONVIF camera probes: restricted to factory camera CIDRs.
   - Internal service calls: restricted to registered service identities.
@@ -409,7 +472,7 @@ Displays and exports (PDF/eDHR) must render:
 
 ### 7.1 Recovery Objectives & SLA Definition (Gate 10)
 * **Measured RPO Target**: **$\le 15\text{ minutes}$** (Continuous WAL archiving in Postgres / 15-minute online SQLite backup snapshots).
-* **Demonstrated RTO Target**: **$\le 2\text{ hours}$** (Measured during automated restore drills).
+* **Demonstrated RTO Target**: **$\le 2\text{ hours}$** (Demonstrated during automated restore drills).
 
 ### 7.2 Point-in-Time Recovery Package Architecture
 Backups bundle four synchronized tiers into an encrypted package (`vigilone-recovery-YYYYMMDD-HHMMSS.tar.gz`):
@@ -505,31 +568,31 @@ OVERALL READINESS STATUS: [ CUSTOMER DEPLOYMENT READY: YES ]
 Blockers: 0 | High findings: 0 | Warnings: 1 | Not Verified: 0
 Release: VigilOne 1.0.0 | Commit: 9ccdab1 | Image: vigilone-api@sha256:4f8e...
 SBOM: VERIFIED | Policy: v1 | Checked: 2026-09-09T14:30:00Z
-Engineering Readiness Score: 9.4 / 10
+Target Readiness Score: >= 9.0 / 10 (Subject to post-implementation re-audit)
 ================================================================================
 ```
 
 ---
 
-## 9. Final Projected Audit Scorecard
+## 9. Projected Readiness Transformation
 
 | Dimension | Initial Audit Score | Target Release Score | Justification & Verification Evidence |
 |---|:---:|:---:|---|
-| **Authentication** | 0.5 / 10 | **9.5 / 10** | Default-deny on 55/55 endpoints; dual-token JWT; anti-stale `authzVersion`; instant revocation. |
-| **RBAC / Authorization** | 0.5 / 10 | **9.5 / 10** | Capability-based permissions; strict SoD (System Admin decoupled from Quality). |
-| **Session & Credentials** | 1.0 / 10 | **9.0 / 10** | Argon2id/Bcrypt for PINs; SHA-256 for tokens; token-family refresh rotation; anti-enumeration. |
-| **Part 11 / E-Signatures** | 4.0 / 10 | **9.5 / 10** | Server-derived identity; two-component PIN re-auth; canonical envelope hash; version linkage. |
-| **Tenant / Site Isolation** | 1.0 / 10 | **9.0 / 10** | Mandatory `RequestContext`; scoped repository factory; 404 existence defense. |
-| **Perimeter & Deployment** | 5.0 / 10 | **9.0 / 10** | Caddy TLS 1.3; Adminer excised; internal DB networking; zero default Compose passwords. |
-| **OT / IIoT Security** | 5.0 / 10 | **8.5 / 10** | Challenge-response handshake; dedicated host firewall routing; 64KB buffer defense. |
-| **DevSecOps** | 3.0 / 10 | **9.0 / 10** | Blocking `npm audit` with governed exceptions; Semgrep SAST; Gitleaks; Trivy; CycloneDX SBOM. |
-| **Reliability & DR** | 0.0 / 10 | **9.0 / 10** | Point-in-time recovery packages; automated restore drill script; measured RPO $\le 15$m, RTO $\le 2$h. |
-| **Testing** | 5.0 / 10 | **9.0 / 10** | Expanded security test suites; cross-site isolation; concurrency races; benchmark budgets. |
-| **Productization** | 3.0 / 10 | **8.5 / 10** | Appliance onboarding bootstrap wizard; removal of hardcoded demo seed; `vigilone doctor`. |
-| **Data Integrity** | 6.0 / 10 | **9.0 / 10** | Hash chain backed by authenticated identity and database-level append-only privileges. |
-| **Traceability** | 7.0 / 10 | **8.5 / 10** | Forward/backward trace preserved across backup/restore drills and site-scoped boundaries. |
-| **Architecture** | 7.0 / 10 | **8.5 / 10** | Clean 3-tier event-sourcing with strict persistence scoping and telemetry separation. |
-| **Composite Score** | **~4.3 / 10** | **$\ge 9.2\text{ / }10$** | **Production-ready, edge-native SMT quality & compliance appliance.** |
+| **Authentication** | 0.5 / 10 | **$\ge 9.0$ / 10** | Default-deny on 55/55 endpoints; dual-token JWT; anti-stale `authzVersion`; instant revocation. |
+| **RBAC / Authorization** | 0.5 / 10 | **$\ge 9.0$ / 10** | Capability-based permissions; strict SoD (System Admin decoupled from Quality). |
+| **Session & Credentials** | 1.0 / 10 | **$\ge 9.0$ / 10** | Argon2id/Bcrypt for PINs; SHA-256 for tokens; token-family refresh rotation; anti-enumeration. |
+| **Part 11 / E-Signatures** | 4.0 / 10 | **$\ge 9.0$ / 10** | Server-derived identity; two-component PIN re-auth; canonical envelope hash; version linkage. |
+| **Tenant / Site Isolation** | 1.0 / 10 | **$\ge 9.0$ / 10** | Mandatory `RequestContext`; scoped repository factory; 404 existence defense. |
+| **Perimeter & Deployment** | 5.0 / 10 | **$\ge 9.0$ / 10** | Caddy TLS 1.3; Adminer excised; internal DB networking; zero default Compose passwords; port 8554 excised. |
+| **OT / IIoT Security** | 5.0 / 10 | **$\ge 8.5$ / 10** | Challenge-response handshake; dedicated host firewall routing; 64KB buffer defense. |
+| **DevSecOps** | 3.0 / 10 | **$\ge 9.0$ / 10** | Blocking `npm audit` with governed exceptions; Semgrep SAST; Gitleaks; Trivy; CycloneDX SBOM. |
+| **Reliability & DR** | 0.0 / 10 | **$\ge 9.0$ / 10** | Point-in-time recovery packages; automated restore drill script; measured RPO $\le 15$m, RTO $\le 2$h. |
+| **Testing** | 5.0 / 10 | **$\ge 9.0$ / 10** | Expanded security test suites; cross-site isolation; concurrency races; benchmark budgets. |
+| **Productization** | 3.0 / 10 | **$\ge 8.5$ / 10** | Appliance onboarding bootstrap wizard; removal of hardcoded demo seed; `vigilone doctor`. |
+| **Data Integrity** | 6.0 / 10 | **$\ge 9.0$ / 10** | Hash chain backed by authenticated identity and database-level append-only privileges. |
+| **Traceability** | 7.0 / 10 | **$\ge 8.5$ / 10** | Forward/backward trace preserved across backup/restore drills and site-scoped boundaries. |
+| **Architecture** | 7.0 / 10 | **$\ge 8.5$ / 10** | Clean 3-tier event-sourcing with strict persistence scoping and telemetry separation. |
+| **Overall Target** | **~4.3 / 10** | **$\ge 9.0\text{ / }10$** | **Production-ready, edge-native SMT quality & compliance appliance.** |
 
 ---
-*End of Specification — Locked for Implementation Planning.*
+*End of Specification — Frozen for Implementation Planning.*
