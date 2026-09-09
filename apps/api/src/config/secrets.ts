@@ -101,6 +101,14 @@ export class SecretsConfigManager {
   }
 
   /**
+   * Returns configured allowed subnets for OT and internal service isolation.
+   */
+  public static getAllowedSubnets(): string[] {
+    const config = this.cachedConfig || this.loadConfig();
+    return config.allowedSubnets;
+  }
+
+  /**
    * Generates a sanitized security audit report of environment hygiene.
    */
   public static getSanitizedReport(): Record<string, any> {

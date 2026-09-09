@@ -29,6 +29,7 @@ import { SecretsConfigManager } from './config/secrets';
 import { authRouter } from './routes/auth.router';
 import { authenticateToken, requirePermission } from './middleware/auth.middleware';
 import { Permission } from './security/permissions';
+import { OnboardingService } from './services/onboarding.service';
 
 dotenv.config();
 
@@ -62,6 +63,7 @@ const PUBLIC_ALLOWLIST = [
   '/api/health',
   '/api/v1/auth/login',
   '/api/v1/auth/refresh',
+  '/api/v1/auth/bootstrap',
   '/api/v1/openapi.json',
   '/api-docs',
   '/metrics'
@@ -231,6 +233,7 @@ async function bootstrap() {
       console.log('[API] Empty database detected, running initial seed...');
       await seedDatabase();
     }
+    OnboardingService.setState('PRODUCTION_ACTIVE');
 
     // Start Fuji Nexim TCP Socket Gateway (Default Port 30040)
     const fujiPort = parseInt(process.env.FUJI_PORT || '30040', 10);

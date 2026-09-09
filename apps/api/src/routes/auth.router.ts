@@ -1,8 +1,8 @@
-// apps/api/src/routes/auth.router.ts
 import { Router, Request, Response } from 'express';
 import { AuthenticationService } from '../services/authentication.service';
 import { SessionManager } from '../security/session-manager';
 import { TrustedProxyResolver } from '../security/trusted-proxy';
+import { OnboardingService } from '../services/onboarding.service';
 
 export const authRouter = Router();
 
@@ -142,3 +142,50 @@ authRouter.post('/logout', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+/**
+ * /api/v1/auth/bootstrap
+ * One-time transactional onboarding & appliance provisioning endpoint.
+ * When in PRODUCTION_ACTIVE, permanently rejects all requests with HTTP 410 GONE.
+ */
+authRouter.all('/bootstrap', async (req: Request, res: Response) => {
+  if (OnboardingService.getState() === 'PRODUCTION_ACTIVE') {
+    return res.status(410).json({
+      success: false,
+      error: 'ENDPOINT_GONE',
+      message: 'Appliance is in PRODUCTION_ACTIVE state. Bootstrap endpoint is permanently unmounted.'
+    });
+  }
+
+  if (req.method === 'GET') {
+    return res.json({
+      success: true,
+      state: OnboardingService.getState(),
+      message: 'Appliance is ready for initial provisioning'
+    });
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({
+      success: false,
+      error: 'METHOD_NOT_ALLOWED',
+      message: 'Only POST is supported for provisioning'
+    });
+  }
+
+  try {
+    const result = await OnboardingService.provision(req.body);
+    return res.status(201).json({
+      success: true,
+      message: 'Appliance successfully provisioned to PRODUCTION_ACTIVE.',
+      data: result
+    });
+  } catch (err: any) {
+    const statusCode = err.statusCode || 400;
+    return res.status(statusCode).json({
+      success: false,
+      error: err.message || 'Provisioning failed'
+    });
+  }
+});
+

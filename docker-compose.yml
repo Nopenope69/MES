@@ -54,8 +54,8 @@ services:
       POSTGRES_USER: mes_user
       POSTGRES_PASSWORD: mes_password
       POSTGRES_DB: mes_db
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"  # Hardened: Unpublished from host; accessible only within mes_network
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./apps/api/src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
@@ -67,10 +67,29 @@ services:
       timeout: 5s
       retries: 5
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: smt_mes_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - mes-web
+      - mes-api
+    networks:
+      - mes_network
+
   adminer:
     image: adminer:latest
     container_name: smt_mes_adminer
     restart: unless-stopped
+    profiles:
+      - debug
     ports:
       - "8080:8080"
     depends_on:
@@ -81,7 +100,10 @@ services:
 volumes:
   pgdata:
   mes_api_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   mes_network:
     driver: bridge
+
