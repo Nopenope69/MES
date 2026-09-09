@@ -6,9 +6,13 @@ node_modules/
 # Production builds
 dist/
 dist-standalone/
-release/
 build/
 out/
+release/*
+!release/mes-simulator-win.exe.part*
+!release/restore-win.bat
+!release/restore-unix.sh
+!release/README.txt
 
 # Local databases & logs
 *.db

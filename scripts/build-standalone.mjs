@@ -144,6 +144,27 @@ Enjoy testing the MES Simulator!
 `;
 fs.writeFileSync(path.join(releaseDir, 'README.txt'), readmeContent, 'utf-8');
 
+// Also create chunk parts for Git version control without large file size timeouts
+console.log('Generating 5MB Git-friendly binary chunks and restore scripts...');
+try {
+  // Remove any previous part files
+  const existingParts = fs.readdirSync(releaseDir).filter(f => f.startsWith('mes-simulator-win.exe.part'));
+  for (const p of existingParts) {
+    fs.unlinkSync(path.join(releaseDir, p));
+  }
+  execSync('split -b 5m mes-simulator-win.exe mes-simulator-win.exe.part', { cwd: releaseDir });
+  
+  const restoreBat = `@echo off\r\necho Assembling mes-simulator-win.exe from parts...\r\ncopy /b mes-simulator-win.exe.part* mes-simulator-win.exe\r\necho Assembly complete! Run mes-simulator-win.exe to start.\r\npause\r\n`;
+  fs.writeFileSync(path.join(releaseDir, 'restore-win.bat'), restoreBat, 'utf-8');
+
+  const restoreSh = `#!/bin/bash\ncat release/mes-simulator-win.exe.part* > release/mes-simulator-win.exe\nchmod +x release/mes-simulator-win.exe\necho "mes-simulator-win.exe assembled!"\n`;
+  fs.writeFileSync(path.join(releaseDir, 'restore-unix.sh'), restoreSh, 'utf-8');
+  fs.chmodSync(path.join(releaseDir, 'restore-unix.sh'), 0o755);
+  console.log('  ✓ 5MB chunks and restore-win.bat generated.');
+} catch (err) {
+  console.warn('  (split command failed:', err.message, ')');
+}
+
 // Also create zip archive for Windows distribution
 console.log('Creating Windows distribution archive (release/mes-simulator-windows-x64.zip)...');
 try {

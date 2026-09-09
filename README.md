@@ -57,6 +57,26 @@ Antigravity MES is architected following the **3-Tier Event-Driven Model** and t
 
 ---
 
+## Standalone Simulator Distribution (Zero Setup for Windows & macOS)
+
+Test the complete SMT MES cleanroom cockpit and API with zero dependencies (no Node.js, Python, or database required):
+
+### For Windows:
+* **Option A (Pre-packaged Release)**: Download directly from **[GitHub Releases v1.0.0](https://github.com/Nopenope69/MES/releases/tag/v1.0.0)**
+* **Option B (From Git Clone)**:
+  1. Open the `release/` folder.
+  2. Double-click **`restore-win.bat`** (assembles the binary from Git chunks in <1 second).
+  3. Double-click **`mes-simulator-win.exe`**.
+  4. Your default web browser will automatically open to `http://localhost:4000/`.
+
+### For macOS:
+```bash
+npm run package:exe
+./release/mes-simulator-macos
+```
+
+---
+
 ## Monorepo Structure
 
 ```
