@@ -506,7 +506,7 @@ git commit -m "feat(perimeter): excise Adminer, implement Caddy TLS 1.3, SafeCon
 - Defensive framing guards: 64KB max buffer accumulator limit, 4-byte sync header validation, immediate disconnect on corrupt length, 30s idle timeout.
 - Documents network compensating controls (dedicated OT interface/VLAN, hardware firewall, monitored IP allowlist).
 
-- [ ] **Step 1: Write failing test for framing accumulator limits and protocol DoS defense**
+- [x] **Step 1: Write failing test for framing accumulator limits and protocol DoS defense**
 
 ```typescript
 // apps/api/tests/ot-fuji-security.test.ts
@@ -520,20 +520,20 @@ describe('OT Fuji Gateway Security & Protocol Suite', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
   Run: `npm --workspace=@mes/api test -- apps/api/tests/ot-fuji-security.test.ts`
   Expected: FAIL.
 
-- [ ] **Step 3: Implement defensive framing guards in `FujiNeximAdapter`**
+- [x] **Step 3: Implement defensive framing guards in `FujiNeximAdapter`**
 
-- [ ] **Step 4: Run focused test to verify it passes**
+- [x] **Step 4: Run focused test to verify it passes**
   Run: `npm --workspace=@mes/api test -- apps/api/tests/ot-fuji-security.test.ts`
   Expected: PASS.
 
-- [ ] **Step 5: Run full regression suite**
+- [x] **Step 5: Run full regression suite**
   Run: `npm test`
 
-- [ ] **Step 6: Commit atomically**
+- [x] **Step 6: Commit atomically**
 ```bash
 git add apps/api/src/adapters/fuji-nexim.adapter.ts apps/api/tests/ot-fuji-security.test.ts
 git commit -m "feat(ot): implement defensive 64KB framing guards and DoS protections on Fuji gateway"

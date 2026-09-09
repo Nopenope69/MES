@@ -27,6 +27,23 @@ import {
  * Decodes Big-Endian length + STX (0x02) / ETX (0x03) packets.
  * Includes stream frame accumulator for fragmented/coalesced TCP packets.
  * Includes closed-loop Splicing Verification Interlock (ADR-003 decoupled).
+ *
+ * =========================================================================================
+ * MANDATORY OT NETWORK COMPENSATING CONTROLS (IEC 62443 / Defense-in-Depth):
+ * Standard OEM Fuji Nexim SMT equipment controllers (NXT III, AIMEX) run proprietary wire
+ * protocols and firmware that do NOT support custom TLS or application-level authentication.
+ * Modifying the OEM wire format with custom handshakes would break line controller interop.
+ * Therefore, deployment requires strict network-level compensating controls:
+ * 1. Dedicated OT VLAN / Interface: The gateway socket (port 30040) binds strictly to an
+ *    isolated physical OT machine network (e.g. 192.168.40.0/24) with no route to enterprise LAN
+ *    or public Internet.
+ * 2. Hardware Industrial Firewall: Strict Layer-3/4 stateful inspection between IT and OT segments,
+ *    blocking all traffic except authorized machine controller IPs.
+ * 3. Monitored IP Allowlist (IpFirewall): Layer-4 ingress enforcement validating remote IP
+ *    against configured machine controller CIDR blocks before socket acceptance.
+ * 4. Protocol-Safe Defensive Framing: Strict 64KB accumulator limit, declared length bounds
+ *    (2 <= totalLength <= 65536), sync header (STX) validation, and 30-second idle socket timeout.
+ * =========================================================================================
  */
 export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllableEquipmentAdapter {
   readonly id = 'fuji-nxt-01';
@@ -43,10 +60,20 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
   private framesProcessedTotal: number = 0;
   private lastFrameReceivedAt?: string;
   public static readonly MAX_SOCKET_BUFFER: number = 64 * 1024; // 64KB max buffer guard against memory exhaustion DoS
+  public static readonly IDLE_TIMEOUT_MS: number = 30000; // 30-second socket timeout to prevent hung connections
+  private customIdleTimeoutMs: number = FujiNeximAdapter.IDLE_TIMEOUT_MS;
   private customAllowedSubnets: string[] | null = null;
 
   public setAllowedSubnets(subnets: string[] | null): void {
     this.customAllowedSubnets = subnets;
+  }
+
+  public setIdleTimeout(ms: number): void {
+    this.customIdleTimeoutMs = ms;
+  }
+
+  public getIdleTimeout(): number {
+    return this.customIdleTimeoutMs;
   }
 
   /**
@@ -58,17 +85,23 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
     const frames: Buffer[] = [];
     let offset = 0;
 
-    while (buffer.length - offset >= FUJI_FRAMING.HEADER_SIZE + 2) {
+    while (buffer.length - offset >= FUJI_FRAMING.HEADER_SIZE) {
       const totalLength = buffer.readUInt32BE(offset);
-      const fullFrameSize = FUJI_FRAMING.HEADER_SIZE + totalLength;
 
-      // Sanity check: totalLength must be reasonable (e.g. <= 65536 bytes) and at least 2 bytes (STX+ETX)
-      if (totalLength < 2 || totalLength > 65536) {
-        // Corrupted length header: scan forward by 1 byte to re-synchronize
-        offset += 1;
-        continue;
+      // Declared Length Guard: totalLength must be between 2 (STX+ETX) and MAX_SOCKET_BUFFER (64KB)
+      if (totalLength < 2 || totalLength > FujiNeximAdapter.MAX_SOCKET_BUFFER) {
+        break;
       }
 
+      // Sync Header Guard: when at least 5 bytes are present from offset, verify byte 4 is STX (0x02)
+      if (buffer.length - offset >= FUJI_FRAMING.HEADER_SIZE + 1) {
+        const stx = buffer[offset + FUJI_FRAMING.HEADER_SIZE];
+        if (stx !== FUJI_FRAMING.STX) {
+          break;
+        }
+      }
+
+      const fullFrameSize = FUJI_FRAMING.HEADER_SIZE + totalLength;
       if (buffer.length - offset < fullFrameSize) {
         // Incomplete frame; wait for additional TCP chunks
         break;
@@ -82,8 +115,8 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
         frames.push(buffer.subarray(offset, offset + fullFrameSize));
         offset += fullFrameSize;
       } else {
-        // Corrupted frame boundary: scan forward by 1 byte to find next valid STX header
-        offset += 1;
+        // Corrupted frame boundary: break to prevent desynchronized processing
+        break;
       }
     }
 
@@ -452,20 +485,31 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
     socket.write(this.buildAckFrame(parsed.command, parsed.seqId, true));
   }
 
-  public startListener(port = 30040, workCenterId = 'wc-nxt-01'): void {
+  public startListener(port = 30040, workCenterId = 'wc-nxt-01', idleTimeoutMs?: number): void {
     if (this.isRunning) return;
     this.activePort = port;
+    const socketTimeout = idleTimeoutMs ?? this.customIdleTimeoutMs;
 
     this.server = net.createServer((socket) => {
       const clientIp = socket.remoteAddress || '';
       const allowed = this.customAllowedSubnets || SecretsConfigManager.loadConfig().allowedSubnets;
 
-      // OT Subnet & IP Firewall Interlock
+      // Compensating Control #3: OT Subnet & IP Firewall Interlock
       if (!IpFirewall.isAllowed(clientIp, allowed)) {
         console.warn(`[SECURITY ALERT] Blocked unauthorized SMT TCP connection from IP: ${clientIp}`);
         socket.destroy();
         return;
       }
+
+      // Idle Timeout Guard: Configure 30-second socket timeout (or configured timeoutMs)
+      // Closes hung connections on silence/inactivity.
+      socket.setTimeout(socketTimeout);
+      socket.on('timeout', () => {
+        console.warn(
+          `[SECURITY ALERT] OT Socket idle timeout (${socketTimeout}ms) reached for client: ${clientIp}. Terminating connection.`
+        );
+        socket.destroy();
+      });
 
       this.activeConnections++;
       console.log(`[Fuji Gateway] SMT Machine authorized & connected from ${socket.remoteAddress}:${socket.remotePort}`);
@@ -473,21 +517,83 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
       let socketBuffer = Buffer.alloc(0);
 
       socket.on('data', async (chunk: Buffer) => {
-        // Guard against buffer overflow / memory exhaustion DoS
-        if (socketBuffer.length + chunk.length >= FujiNeximAdapter.MAX_SOCKET_BUFFER) {
+        // Accumulator Overflow Guard: If socketBuffer.length + chunk.length > 65536, immediately disconnect
+        if (socketBuffer.length + chunk.length > FujiNeximAdapter.MAX_SOCKET_BUFFER) {
           console.warn(
-            `[SECURITY ALERT] Socket buffer overflow attempt from ${clientIp} (${socketBuffer.length + chunk.length} bytes >= ${FujiNeximAdapter.MAX_SOCKET_BUFFER}). Terminating connection.`
+            `[SECURITY ALERT] Socket buffer overflow attempt from ${clientIp} (${socketBuffer.length + chunk.length} bytes > ${FujiNeximAdapter.MAX_SOCKET_BUFFER}). Terminating connection.`
           );
+          socketBuffer = Buffer.alloc(0);
           socket.destroy();
           return;
         }
 
         socketBuffer = Buffer.concat([socketBuffer, chunk]);
 
-        const { frames, remainder } = FujiNeximAdapter.extractFrames(socketBuffer);
-        socketBuffer = Buffer.from(remainder);
+        const framesToProcess: Buffer[] = [];
 
-        for (const frame of frames) {
+        while (true) {
+          // Declared Length Guard: If at least 4 bytes are present, inspect declared totalLength
+          if (socketBuffer.length >= FUJI_FRAMING.HEADER_SIZE) {
+            const totalLength = socketBuffer.readUInt32BE(0);
+
+            // Disconnect socket immediately (socket.destroy()), drop buffer, and log security warning.
+            // Do not allow memory accumulation if declared length > 65536 or < 2 (minimum STX + ETX).
+            if (totalLength > FujiNeximAdapter.MAX_SOCKET_BUFFER || totalLength < 2) {
+              console.warn(
+                `[SECURITY ALERT] Malformed declared length (${totalLength} bytes) from ${clientIp}. Terminating connection immediately.`
+              );
+              socketBuffer = Buffer.alloc(0);
+              socket.destroy();
+              return;
+            }
+          }
+
+          // Sync Header Guard: When at least 5 bytes are present in accumulator, verify byte 4 is FUJI_FRAMING.STX (0x02).
+          // If invalid/corrupt, immediately drop the connection (socket.destroy()).
+          if (socketBuffer.length >= FUJI_FRAMING.HEADER_SIZE + 1) {
+            const stx = socketBuffer[FUJI_FRAMING.HEADER_SIZE];
+            if (stx !== FUJI_FRAMING.STX) {
+              console.warn(
+                `[SECURITY ALERT] Corrupt sync header (byte 4 = 0x${stx.toString(16)} != 0x02) from ${clientIp}. Terminating connection immediately.`
+              );
+              socketBuffer = Buffer.alloc(0);
+              socket.destroy();
+              return;
+            }
+          }
+
+          // Need at least 4 bytes to determine full frame size
+          if (socketBuffer.length < FUJI_FRAMING.HEADER_SIZE) {
+            break;
+          }
+
+          const totalLength = socketBuffer.readUInt32BE(0);
+          const fullFrameSize = FUJI_FRAMING.HEADER_SIZE + totalLength;
+
+          // Incomplete frame; wait for subsequent TCP chunks
+          if (socketBuffer.length < fullFrameSize) {
+            break;
+          }
+
+          // Frame Boundary Guard: Verify ETX (0x03) at byte 4 + totalLength - 1
+          const etx = socketBuffer[fullFrameSize - 1];
+          if (etx !== FUJI_FRAMING.ETX) {
+            console.warn(
+              `[SECURITY ALERT] Corrupt frame boundary (ETX = 0x${etx.toString(16)} != 0x03) from ${clientIp}. Terminating connection immediately.`
+            );
+            socketBuffer = Buffer.alloc(0);
+            socket.destroy();
+            return;
+          }
+
+          // Extract frame and advance accumulator
+          framesToProcess.push(socketBuffer.subarray(0, fullFrameSize));
+          socketBuffer = Buffer.from(socketBuffer.subarray(fullFrameSize));
+        }
+
+        // Process valid extracted frames sequentially
+        for (const frame of framesToProcess) {
+          if (socket.destroyed) break;
           this.framesProcessedTotal++;
           this.lastFrameReceivedAt = new Date().toISOString();
           await this.processSingleFrame(socket, frame, workCenterId);
