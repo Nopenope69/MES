@@ -1,6 +1,8 @@
 // apps/api/src/services/authentication.service.ts
 import { getDatabase, IDatabase } from '../db/database';
 import { PinPolicy } from '../security/pin-policy';
+import { TokenManager } from '../security/jwt';
+import { SessionManager } from '../security/session-manager';
 
 export interface LoginResult {
   success: boolean;
@@ -34,6 +36,7 @@ export class AuthenticationService {
    * Authenticates an operator using their unique code and numeric/alphanumeric PIN.
    * Enforces anti-user-enumeration timing equality, atomic account lockout on 5 failures,
    * and Argon2id/Bcrypt hash verification.
+   * Issues 15-minute access JWT and 12-hour rotating refresh session.
    */
   public static async loginWithPin(code: string, pin: string, ipAddress: string): Promise<LoginResult> {
     const rows = await this.db.query(
@@ -97,6 +100,24 @@ export class AuthenticationService {
       [now.toISOString(), operator.id]
     );
 
+    const authzVersion = Number(operator.authz_version || 1);
+    const orgId = operator.organization_id || 'org-dixon';
+    const siteId = operator.site_id || 'site-noida-p4';
+
+    // Issue rotating refresh session
+    const session = await SessionManager.createSession(operator.id, authzVersion, ipAddress);
+
+    // Issue short-lived 15-minute access JWT
+    const accessToken = TokenManager.generateAccessToken({
+      sub: operator.id,
+      code: operator.code,
+      name: operator.name,
+      role: operator.role,
+      org: orgId,
+      site: siteId,
+      authzVersion
+    });
+
     return {
       success: true,
       operator: {
@@ -104,21 +125,60 @@ export class AuthenticationService {
         code: operator.code,
         name: operator.name,
         role: operator.role,
-        organizationId: operator.organization_id || 'org-dixon',
-        siteId: operator.site_id || 'site-noida-p4'
+        organizationId: orgId,
+        siteId: siteId
       },
-      accessToken: 'dummy-access-token-task-2',
-      refreshToken: 'dummy-refresh-token-task-2'
+      accessToken,
+      refreshToken: session.refreshToken
     };
   }
 
   /**
-   * Session refresh method (extended in Task 3)
+   * Rotates refresh session and issues new 15-minute access JWT.
+   * Enforces token reuse detection (revoking family on replay) and authzVersion freshness.
    */
   public static async refreshSession(refreshToken: string, ipAddress: string): Promise<RefreshResult> {
+    const rotation = await SessionManager.rotateSession(refreshToken, ipAddress);
+
+    if (!rotation.success) {
+      return {
+        success: false,
+        error: rotation.error
+      };
+    }
+
+    // Fetch fresh operator profile
+    const rows = await this.db.query(
+      `SELECT * FROM operators WHERE id = ?`,
+      [rotation.operatorId]
+    );
+
+    if (rows.length === 0) {
+      return {
+        success: false,
+        error: 'OPERATOR_NOT_FOUND'
+      };
+    }
+
+    const operator = rows[0];
+    const orgId = operator.organization_id || 'org-dixon';
+    const siteId = operator.site_id || 'site-noida-p4';
+
+    // Issue new access JWT
+    const accessToken = TokenManager.generateAccessToken({
+      sub: operator.id,
+      code: operator.code,
+      name: operator.name,
+      role: operator.role,
+      org: orgId,
+      site: siteId,
+      authzVersion: rotation.authzVersion!
+    });
+
     return {
-      success: false,
-      error: 'NOT_IMPLEMENTED'
+      success: true,
+      accessToken,
+      refreshToken: rotation.newRefreshToken
     };
   }
 }

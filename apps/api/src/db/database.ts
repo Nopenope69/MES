@@ -289,6 +289,26 @@ export async function initDatabase(): Promise<void> {
   try { await db.execute("ALTER TABLE operators ADD COLUMN organization_id VARCHAR(64) DEFAULT 'org-dixon';"); } catch {}
   try { await db.execute("ALTER TABLE operators ADD COLUMN site_id VARCHAR(64) DEFAULT 'site-noida-p4';"); } catch {}
 
+  // Dual-Token Refresh Sessions (Section 2 / Task 3)
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id VARCHAR(64) PRIMARY KEY,
+        operator_id VARCHAR(64) NOT NULL,
+        token_hash VARCHAR(64) UNIQUE NOT NULL,
+        family_id VARCHAR(64) NOT NULL,
+        revoked INTEGER DEFAULT 0,
+        revoked_reason VARCHAR(64),
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_by_ip VARCHAR(64) NOT NULL,
+        authz_version INTEGER DEFAULT 1
+      );
+    `);
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);");
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id);");
+  } catch {}
+
   console.log('[DB] Schema verified and initialized.');
 }
 

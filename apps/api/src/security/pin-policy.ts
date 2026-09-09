@@ -39,7 +39,8 @@ export class PinPolicy {
       if (hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$')) {
         return await bcrypt.compare(pin, hash);
       }
-      return false;
+      // Migration fallback for unmigrated legacy plaintext PIN
+      return hash === pin;
     } catch {
       return false;
     }

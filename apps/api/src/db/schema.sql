@@ -1002,6 +1002,21 @@ CREATE TABLE IF NOT EXISTS reflow_profile_correlations (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ============================================================================
+-- Section 2: Dual-Token Architecture & Refresh Sessions (Task 3)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id VARCHAR(64) PRIMARY KEY,
+  operator_id VARCHAR(64) NOT NULL,
+  token_hash VARCHAR(64) UNIQUE NOT NULL,
+  family_id VARCHAR(64) NOT NULL,
+  revoked INTEGER DEFAULT 0,
+  revoked_reason VARCHAR(64),
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_by_ip VARCHAR(64) NOT NULL,
+  authz_version INTEGER DEFAULT 1
+);
 
-
-
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id);
