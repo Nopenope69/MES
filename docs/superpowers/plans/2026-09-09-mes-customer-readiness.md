@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Transform the Antigravity SMT MES Engine from an advanced prototype into an enterprise-hardened, customer-deployable edge appliance with verified readiness across identity, capability-based RBAC, attributable 21 CFR Part 11 e-signatures, tenant/site isolation, perimeter security, disaster recovery, and automated release verification.
+**Goal:** Deliver the production customer release baseline for the Antigravity SMT MES Engine as an enterprise-hardened, customer-deployable single-tenant edge appliance targeting Fuji NXT / EMS surface-mount lines.
 
-**Architecture:** We wrap the existing, verified SMT manufacturing core (MSL, Splicing, IPC-CFX, Reflow PWI) in an uncompromising security perimeter: server-derived `RequestContext` with classified scoped repositories (`GLOBAL`, `ORGANIZATION_SCOPED`, `SITE_SCOPED`), dual-token architecture with 15-minute short-lived access JWTs (browser-side volatile memory storage) backed by revocable server-side refresh sessions and anti-stale `authzVersion`, two-component PIN e-signatures with RFC 8785 canonical envelope hashing and database-level non-owner append-only privileges, same-origin Caddy TLS 1.3 edge proxy with modular `SafeConnector` egress pinning, point-in-time recovery packages with persistent DR drill history, an automated release readiness CLI (`mes doctor`) validating signed release attestations, and an independent findings-based audit closure verification.
+**Scope:** Dedicated strictly to the Antigravity SMT MES edge appliance. We wrap the verified SMT manufacturing core (MSL, Splicing, IPC-CFX, Reflow PWI) in an enterprise perimeter: server-derived `RequestContext` with classified scoped repositories (`GLOBAL`, `ORGANIZATION_SCOPED`, `SITE_SCOPED`), dual-token architecture with 15-minute short-lived access JWTs (browser-side volatile memory storage) backed by revocable server-side refresh sessions and anti-stale `authzVersion`, two-component PIN e-signatures with RFC 8785 canonical envelope hashing and database-level non-owner append-only privileges, edge perimeter TLS (TLS 1.3 preferred, TLS 1.2 minimum where required) with modular `SafeConnector` egress pinning, point-in-time recovery packages with persistent DR drill history, an automated release readiness CLI (`mes doctor`) validating signed release attestations, and an independent findings-based audit closure verification.
 
 **Tech Stack:** TypeScript, Node.js 22, Express, SQLite (`node:sqlite`) & PostgreSQL 16, Caddy 2, `argon2` / `bcryptjs`, `jsonwebtoken`, Zod, Vitest, Semgrep, Gitleaks, Trivy, CycloneDX.
 
@@ -196,7 +196,11 @@ git commit -m "feat(security): implement RequestContext and classified ScopedRep
 **Interfaces:**
 - Produces: `PinPolicy.hashPin(pin)`, `PinPolicy.verifyPin(pin, hash)`, `PinPolicy.verifyUnknownOperator(pin)`, `PinPolicy.validateComplexity(pin, role)`.
 - Algorithms: Primary: Argon2id (`$argon2id$...`), Supported: Bcrypt (`$2b$12$...`).
-- Migration: Reads plaintext `pin` -> hashes with Argon2id/Bcrypt -> updates `pin_hash` -> verifies all hashes -> alters column `pin_hash NOT NULL` -> drops `pin` column.
+- Migration Script (`scripts/migrate-pins.ts`):
+  - Idempotent and resumable across interruptions.
+  - Safely handles populated production databases (does not assume empty table).
+  - Iterates batches of operators where `pin_hash IS NULL`, hashes `pin`, verifies hash against source PIN, and updates row.
+  - Hard invariant: Asserts `COUNT(*) WHERE pin_hash IS NULL == 0` before altering `pin_hash SET NOT NULL` and dropping `pin`. Plaintext column is never retained permanently.
 
 - [ ] **Step 1: Write failing test for PIN hashing, timing equality, lockout, and migration verification**
 
@@ -435,7 +439,7 @@ git commit -m "feat(compliance): implement attributable 21 CFR Part 11 two-compo
 
 ---
 
-### Task 6: Edge Perimeter Hardening, Caddy TLS 1.3 & Modular `SafeConnector` (Section 4)
+### Task 6: Edge Perimeter Hardening, Caddy TLS & Modular `SafeConnector` (Section 4)
 
 **Files:**
 - Modify: `docker-compose.yml`
@@ -448,6 +452,7 @@ git commit -m "feat(compliance): implement attributable 21 CFR Part 11 two-compo
 
 **Interfaces:**
 - Produces: `SafeConnector.connect(url, options)`, `InternalServiceTargetPolicy`, `WebhookTargetPolicy`.
+- Caddy Gateway: TLS 1.3 preferred, TLS 1.2 minimum where required, HSTS, strict CSP, HTTP 301 redirect.
 - Onboarding Wizard: Transactional provisioning (`UNINITIALIZED` -> `PROVISIONING` -> `PRODUCTION_ACTIVE` or `PROVISIONING_FAILED` with clean rollback).
 
 - [ ] **Step 1: Write failing test for SSRF socket pinning, DNS rebinding, and transactional provisioning rollback**
@@ -607,6 +612,7 @@ git commit -m "feat(dr): implement point-in-time recovery packages and persisten
 **Interfaces:**
 - Produces: `npm run doctor`, `MesDoctor.runDiagnostics()`.
 - Release Provenance: Verifies signed `release-manifest.json` containing SBOM digest and scan attestations (`DEVSECOPS RELEASE ATTESTATION: PASS`).
+- CI Audit Exceptions (`.audit-exceptions.json`): Schema requires `cve`, `package`, `rationale`, `owner`, `mitigation`, and `expiresAt`. Unapproved or expired exceptions fail the build.
 - Freshness: Verifies persistent `dr_drill_history` has valid pass $\le 30$ days old.
 - Tri-State Result Model: `PASS`, `FAIL`, `NOT_VERIFIED` (`NOT_VERIFIED` fails readiness).
 

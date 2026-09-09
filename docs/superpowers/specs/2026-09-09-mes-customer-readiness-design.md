@@ -6,19 +6,16 @@
 
 ---
 
-## 1. Executive Summary & Audit Baseline
+## 1. Executive Summary & Appliance Baseline
 
-An exhaustive, independent static code and architecture audit of the **Antigravity SMT MES Engine** evaluated its readiness for commercial customer deployment on Fuji NXT / EMS surface-mount lines.
+This specification establishes the production customer release architecture for the **Antigravity SMT MES Engine** as a dedicated single-tenant, single-plant edge appliance targeting Fuji NXT / EMS surface-mount electronics manufacturing lines.
 
-### The Audit Verdict
-* **Domain Engine**: **VERIFIED & STRONG (~7.0–8.5/10)**. Genuine SMT domain depth: JEDEC J-STD-033D MSL floor-life tracking, closed-loop splicing BOM interlocks, IPC-CFX printer auto-tuning, high-frequency reflow oven telemetry/PWI calculation, and defensive Fuji TCP socket framing.
-* **Security & Enterprise Readiness**: **CRITICAL DEFICIENCIES (1.5/10)**. No authentication on API endpoints; unauthenticated, forgeable 21 CFR Part 11 e-signatures; unenforced tenant/site isolation; plaintext operator PINs; unauthenticated `/security/audit` disclosure; default Compose credentials and exposed Adminer; bypassed CI security gates (`npm audit || true`); and zero backup/disaster recovery mechanism.
-* **Composite Baseline Score**: **~4.3 / 10** (Disqualified from commercial sale or deployment without remediation).
+### Appliance Scope & Architecture Invariant
+The scope of this product is strictly the **Antigravity SMT MES edge appliance**. It encompasses:
+* Deep SMT manufacturing intelligence: JEDEC J-STD-033D MSL floor-life tracking, closed-loop splicing BOM interlocks, IPC-CFX printer auto-tuning, high-frequency reflow oven telemetry/PWI calculation, and defensive Fuji TCP socket framing.
+* Enterprise appliance hardening: server-derived security contexts, classified repository persistence (`GLOBAL`, `ORGANIZATION_SCOPED`, `SITE_SCOPED`), Argon2id/Bcrypt operator credential hygiene, short-lived JWTs with serialized refresh rotation, capability-based RBAC with non-delegable Segregation of Duties, attributable 21 CFR Part 11 e-signatures with non-owner append-only ledger privileges, edge perimeter TLS with modular `SafeConnector` egress pinning, point-in-time recovery packages with persistent DR drill verification, and an automated release readiness CLI (`mes doctor`).
 
-### The Strategic Directive
-> **"Do not rewrite the SMT manufacturing core or convert the Antigravity SMT MES into a multi-million-line generic ERP/MES like Siemens Opcenter. Harden the perimeter, establish trustworthy identity, make recovery real, prove it under test, and productize deployment as a dedicated single-tenant, single-plant edge appliance."**
-
-This specification establishes the technical architecture, security invariants, data schemas, API contracts, and verification gates required to systematically resolve all customer-readiness blockers and security findings, targeting a post-implementation verified readiness score of $\ge 9.0\text{ / }10$.
+This document serves as the authoritative technical baseline for customer deployment readiness. Target readiness score is $\ge 9.0\text{ / }10$, verified through independent post-implementation re-audit.
 
 ---
 
@@ -188,15 +185,19 @@ SELECT * FROM sites WHERE id = ?;
    - **Supported Fallback**: **Bcrypt** with work factor cost $\ge 12$.
    - Plaintext PINs/passwords are strictly forbidden in production storage.
 2. **Controlled Backfill Migration Strategy**:
-   - Existing databases with plaintext PINs undergo a verified one-time migration:
+   - Existing databases with plaintext PINs undergo a verified one-time migration (`scripts/migrate-pins.ts`):
      ```text
-     1. Add nullable pin_hash VARCHAR(255)
-     2. Iterate existing operators, hash plaintext PIN using Argon2id/Bcrypt
-     3. Verify each generated hash against source PIN
-     4. Alter column pin_hash SET NOT NULL
-     5. Drop plaintext pin column
+     1. Add nullable pin_hash VARCHAR(255) if not present
+     2. Iterate all existing operator rows in batches (safely handling populated production tables)
+     3. For rows where pin_hash is null, hash plaintext PIN using Argon2id/Bcrypt
+     4. Cryptographically verify each generated hash against source PIN
+     5. Update pin_hash
+     6. Hard Invariant: Assert COUNT(*) WHERE pin_hash IS NULL == 0 before proceeding
+     7. Alter column pin_hash SET NOT NULL
+     8. Drop plaintext pin column
      ```
-   - **Zero Compatibility Compromise**: Plaintext columns are **never** retained permanently for backwards compatibility.
+   - **Idempotency & Resilience**: `migrate-pins.ts` is strictly idempotent and resumable across process interruptions.
+   - **Zero Compatibility Compromise**: Plaintext columns are **never** retained permanently for backwards compatibility. Plaintext `pin` is dropped only after 100% of rows have verified hashes.
 3. **PIN Complexity Policy**:
    - `OPERATOR`: 4 to 8 numeric digits (leading zeros permitted, e.g. `"0429"`). Validated server-side via `^\d{4,8}$`.
    - Privileged Roles (`SUPERVISOR`, `PROCESS_ENGINEER`, `QA_DIRECTOR`, `SYSTEM_ADMIN`): Minimum **6 to 8 numeric digits** for kiosk PINs, or high-entropy passwords ($\ge 10$ chars with mixed case, numbers, and symbols).
@@ -357,7 +358,7 @@ To prevent database administrators or runtime injection from mutating compliance
 * **Adminer Excised**: The open database management tool is permanently removed from all Docker Compose templates.
 * **PostgreSQL Port Publishing Removed**: Port `5432:5432` is removed from host publishing. PostgreSQL is reachable only by internal Docker containers on `mes_network`.
 * **Zero Default Passwords**: Docker Compose enforces mandatory environment variables (`${POSTGRES_USER:?error}`, `${POSTGRES_PASSWORD:?error}`).
-* **Caddy Gateway**: TLS 1.3 preferred, HSTS, strict CSP, automated HTTP $\rightarrow$ HTTPS redirect (port 80 issues 301 to 443). `/metrics` blocked from external LAN.
+* **Caddy Gateway**: TLS 1.3 preferred, TLS 1.2 minimum where required, HSTS, strict CSP, automated HTTP $\rightarrow$ HTTPS redirect (port 80 issues 301 to 443). `/metrics` blocked from external LAN.
 
 ### 6.2 Transactional Appliance Onboarding & Bootstrap State Machine
 To eliminate persistent setup backdoors while preventing partially initialized appliances:
@@ -436,7 +437,18 @@ Backups bundle four synchronized tiers into an encrypted package (`mes-recovery-
 
 ### 8.1 CI Gates & Signed Release Provenance
 1. **Blocking CI Gates**:
-   - `npm audit` fails on High/Critical vulnerabilities unless covered by an unexpired, schema-validated entry in `.audit-exceptions.json`.
+   - `npm audit` fails on High/Critical vulnerabilities unless covered by an unexpired, schema-validated entry in `.audit-exceptions.json`:
+     ```json
+     {
+       "cve": "CVE-2026-XXXX",
+       "package": "example-pkg",
+       "rationale": "Vulnerable code path is not reachable in runtime execution path",
+       "owner": "security-lead@mes-appliance.local",
+       "mitigation": "Network-level ingress restrictions and strict input parsing prevent exploitation",
+       "expiresAt": "2026-10-15"
+     }
+     ```
+   - Unapproved, missing fields, or expired exceptions fail the build.
    - Semgrep SAST, Gitleaks, Trivy container scans, and CycloneDX SBOM generation execute on every build.
 2. **Signed Release Manifest (`release-manifest.json`)**:
    CI produces a cryptographically signed manifest linking:
