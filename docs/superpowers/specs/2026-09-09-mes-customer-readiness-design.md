@@ -12,33 +12,31 @@ An exhaustive, independent static code and architecture audit of the **Antigravi
 
 ### The Audit Verdict
 * **Domain Engine**: **VERIFIED & STRONG (~7.0–8.5/10)**. Genuine SMT domain depth: JEDEC J-STD-033D MSL floor-life tracking, closed-loop splicing BOM interlocks, IPC-CFX printer auto-tuning, high-frequency reflow oven telemetry/PWI calculation, and defensive Fuji TCP socket framing.
-* **Security & Enterprise Readiness**: **CRITICAL DEFICIENCIES (1.5/10)**. No authentication on 54/55 endpoints; unauthenticated, forgeable 21 CFR Part 11 e-signatures; unenforced tenant/site isolation; plaintext operator PINs; unauthenticated `/security/audit` disclosure; default Compose credentials and exposed Adminer; bypassed CI security gates (`npm audit || true`); and zero backup/disaster recovery mechanism.
+* **Security & Enterprise Readiness**: **CRITICAL DEFICIENCIES (1.5/10)**. No authentication on API endpoints; unauthenticated, forgeable 21 CFR Part 11 e-signatures; unenforced tenant/site isolation; plaintext operator PINs; unauthenticated `/security/audit` disclosure; default Compose credentials and exposed Adminer; bypassed CI security gates (`npm audit || true`); and zero backup/disaster recovery mechanism.
 * **Composite Baseline Score**: **~4.3 / 10** (Disqualified from commercial sale or deployment without remediation).
 
 ### The Strategic Directive
 > **"Do not rewrite the SMT manufacturing core or convert the Antigravity SMT MES into a multi-million-line generic ERP/MES like Siemens Opcenter. Harden the perimeter, establish trustworthy identity, make recovery real, prove it under test, and productize deployment as a dedicated single-tenant, single-plant edge appliance."**
 
-This specification establishes the technical architecture, security invariants, data schemas, API contracts, and verification gates required to systematically elevate every audit dimension to a **Target Readiness Score of $\ge 9.0\text{ / }10$**, subject to independent post-implementation re-audit.
+This specification establishes the technical architecture, security invariants, data schemas, API contracts, and verification gates required to systematically resolve all customer-readiness blockers and security findings, targeting a post-implementation verified readiness score of $\ge 9.0\text{ / }10$.
 
 ---
 
 ## 2. Canonical Audit Traceability Matrix
 
-To eliminate ambiguity between numbered security findings and broader architectural gaps, this canonical matrix maps every audit item to its implementing section and verification test:
-
 | Audit Item | Category | Description | Severity | Implementing Section | Verification Test File |
 |---|---|---|---|---|---|
-| **D.1** | Security | No authentication on API (54/55 endpoints unprotected) | **Blocker** | Section 2 | `tests/auth-pipeline.test.ts` |
+| **D.1** | Security | No authentication on API (complete route inventory unprotected) | **Blocker** | Section 2 | `tests/auth-pipeline.test.ts` |
 | **D.2** | Security | Inert JWT infrastructure (validated in config, never used) | **High** | Section 2 | `tests/auth-pipeline.test.ts` |
 | **D.3** | Security | E-signature actor identity client-supplied (Part 11 forgery) | **Blocker** | Section 3 | `tests/compliance-ledger.test.ts` |
 | **D.4** | Security | Unenforced operator roles / no RBAC | **Blocker** | Section 2 | `tests/rbac-capabilities.test.ts` |
-| **D.5** | Security | Plaintext operator PINs in database | **High** | Section 2 | `tests/auth-pipeline.test.ts` |
+| **D.5** | Security | Plaintext operator PINs in database | **High** | Section 2 | `tests/auth-pin-security.test.ts` |
 | **D.6** | Security | Unenforced multi-site / organization isolation | **Blocker** | Section 1 | `tests/tenant-isolation.test.ts` |
 | **D.7** | DevSecOps | Cosmetic `npm audit --audit-level=high \|\| true` gate | **High** | Section 6 | CI Pipeline Execution |
 | **D.8** | DevSecOps | No SAST, secret scanning, or container scanning in CI | **High** | Section 6 | CI Pipeline Execution |
 | **D.9** | Deployment | Default credentials & open Adminer in `docker-compose.yml` | **High** | Section 4 | `tests/deployment-compose.test.ts` |
 | **D.10** | Security | Unauthenticated `/api/v1/security/audit` network disclosure | **Medium** | Section 4 | `tests/auth-pipeline.test.ts` |
-| **D.11** | OT Security | Fuji gateway lacks device identity beyond source IP | **Medium** | Section 4 | `tests/ot-fuji-security.test.ts` |
+| **D.11** | OT Security | Fuji gateway lacks transport/device authentication | **Medium** | Section 4 | `tests/ot-fuji-security.test.ts` |
 | **D.12** | API Design | Unbounded result sets on list endpoints | **Low** | Section 1 | `tests/api-pagination.test.ts` |
 | **D.13** | Reliability | Silent error swallowing (`catch {}`) on MSL enrichment | **Low** | Section 1 | `tests/msl-reliability.test.ts` |
 | **D.14** | Security | Single shared static API key, no revocation or rotation | **Medium** | Section 2 | `tests/service-credentials.test.ts` |
@@ -53,15 +51,27 @@ To eliminate ambiguity between numbered security findings and broader architectu
 ### 3.1 The Core Persistence Invariant
 > **"No application-level database access occurs without an explicit authenticated human or service security context, and no context can originate tenant, site, role, or operator identity from client-controlled request data."**
 
-### 3.2 Single-Tenant Edge Appliance Deployment Model (Gate 0)
+### 3.2 Single-Tenant Edge Appliance Deployment Model
 * **Appliance Boundary**: Antigravity SMT MES is packaged and deployed as a dedicated single-tenant, single-plant edge appliance per customer factory.
 * **ISA-95 Hierarchy**:
   $$\text{Organization (1)} \longrightarrow \text{Site (1+)} \longrightarrow \text{Area (1+)} \longrightarrow \text{Production Line (1+)} \longrightarrow \text{Work Center} \longrightarrow \text{Equipment Unit}$$
-* **Deterministic Active Site Scope**: While an enterprise may own multiple sites, **each authenticated session is bound strictly to exactly one active `siteId`**.
-* **Zero Client-Controlled Scope**: No route, handler, or query accepts `organization_id`, `site_id`, `actor_id`, or `role` from HTTP request bodies or query parameters. All contextual parameters are derived exclusively from the verified token.
+* **Deterministic Active Site Scope**: While an enterprise may own multiple sites, **each authenticated human session is bound strictly to exactly one active `siteId`**.
 
-### 3.3 Principal & Context Type Separation
-Internal services and background workers must **never** masquerade as human operators or manufacture synthetic `operatorId`s:
+### 3.3 Explicit Persistence Scope Classification
+To prevent query corruption from blindly appending site filters to installation-level or global metadata, all data models are strictly categorized into three scopes:
+
+1. **`GLOBAL`**:
+   - Entities that exist at the software/installation level: `organizations`, `sites`, `system_config`, `permission_catalog`, `event_schemas`.
+   - Access: Requires authenticated context, but queries execute without tenant/site predicates.
+2. **`ORGANIZATION_SCOPED`**:
+   - Entities belonging to the customer organization across all sites: `organization_settings`, `operator_directory`, `global_part_catalog`.
+   - Access: Filtered strictly by `organization_id = ?`.
+3. **`SITE_SCOPED`**:
+   - Factory floor execution entities: `batches`, `lots`, `work_centers`, `production_lines`, `equipment_units`, `reflow_profiles`, `dhr_records`, `compliance_signatures`, `telemetry_samples`, `feeder_setups`.
+   - Access: Filtered strictly by `organization_id = ? AND site_id = ?`.
+
+### 3.4 Principal & Scope Type Separation
+Internal services and background workers must **never** masquerade as human operators or manufacture synthetic `operatorId`s. Furthermore, background infrastructure tasks (e.g. backup, restore, DR verification) operate at defined administrative scopes without inventing fake site IDs:
 
 ```typescript
 export type OperatorRole = 
@@ -70,6 +80,11 @@ export type OperatorRole =
   | 'PROCESS_ENGINEER' 
   | 'QA_DIRECTOR' 
   | 'SYSTEM_ADMIN';
+
+export type ServiceScope =
+  | { readonly kind: 'SITE'; readonly organizationId: string; readonly siteId: string }
+  | { readonly kind: 'ORGANIZATION'; readonly organizationId: string }
+  | { readonly kind: 'SYSTEM'; readonly organizationId: string };
 
 export type SecurityPrincipal =
   | {
@@ -86,9 +101,8 @@ export type SecurityPrincipal =
       readonly kind: 'SERVICE';
       readonly serviceId: string;
       readonly serviceName: string;
+      readonly scope: ServiceScope;
       readonly permissions: ReadonlySet<Permission>;
-      readonly organizationId: string;
-      readonly siteId: string;
       readonly credentialId: string;
     };
 
@@ -103,39 +117,35 @@ export interface ServiceContext {
   readonly principal: Extract<SecurityPrincipal, { kind: 'SERVICE' }>;
   readonly correlationId: string;
   readonly taskId: string;
-  readonly jobName: string; // e.g. 'event-projector', 'backup-runner', 'retention-worker'
+  readonly jobName: string; // e.g. 'backup-runner', 'dr-verifier', 'retention-worker'
 }
 
 export type ExecutionContext = RequestContext | ServiceContext;
 ```
 
-### 3.4 Authority Trichotomy & Reverse Proxy Trust
-1. **Authority Separation**: Strict invariant:
-   $$\text{correlationId (tracing)} \neq \text{requestId (server operation)} \neq \text{operatorId / serviceId (security identity)}$$
-   - Client `X-Correlation-ID` is preserved for distributed tracing only if matching `^[a-zA-Z0-9_-]{8,64}$`.
-   - `requestId` is **always** server-generated via `crypto.randomUUID()`.
-2. **Trusted Proxy Source IP Resolution**:
-   - Express `trust proxy` is configured strictly to the known Caddy container/bridge subnet via `TRUSTED_PROXIES` environment variable (never blindly `loopback` inside Docker bridge networks).
-   - Injected `X-Forwarded-For` headers from untrusted hops are discarded.
-3. **Fail-Closed Missing Context Invariant**:
-   - Any database query, event append, or ledger write attempted without an active `ExecutionContext` immediately throws `SecurityContextMissingError`.
-   - **Zero Defaulting Rule**: The system **never** silently defaults missing contexts to a "system" or "admin" tenant.
-
 ### 3.5 Scoped Repository Factory Pattern
-Application services never receive raw database clients. All persistence access passes through a scoped repository factory:
+Application services never receive raw database clients. All persistence access passes through a scoped repository factory that enforces table classification:
 
 ```typescript
 export interface ScopedDataRepository {
+  // Site-Scoped Repositories
   readonly batches: ScopedBatchRepository;
   readonly genealogy: ScopedGenealogyRepository;
   readonly compliance: ScopedComplianceRepository;
   readonly smt: ScopedSmtRepository;
   readonly reflow: ScopedReflowRepository;
+
+  // Organization-Scoped Repositories
+  readonly organizationSettings: ScopedOrgSettingsRepository;
+
+  // Global Repositories
+  readonly permissionCatalog: GlobalPermissionCatalog;
+  readonly sites: GlobalSiteRepository;
 }
 
 export class MasterRepository {
   public forContext(ctx: ExecutionContext): ScopedDataRepository {
-    if (!ctx || !ctx.principal || !ctx.principal.organizationId || !ctx.principal.siteId) {
+    if (!ctx || !ctx.principal) {
       throw new SecurityContextMissingError('Attempted database access without valid ExecutionContext');
     }
     return new ScopedDataRepositoryImpl(this.db, ctx);
@@ -146,17 +156,23 @@ export class MasterRepository {
 }
 ```
 
-Every query generated by `ScopedDataRepositoryImpl` automatically injects tenant and site predicates:
+Queries enforce appropriate scope based on entity classification:
 ```sql
+-- Site-scoped entity
 SELECT * FROM batches 
-WHERE id = ? 
-  AND organization_id = ? 
-  AND site_id = ?
+WHERE id = ? AND organization_id = ? AND site_id = ?;
+
+-- Organization-scoped entity
+SELECT * FROM organization_settings 
+WHERE key = ? AND organization_id = ?;
+
+-- Global entity
+SELECT * FROM sites WHERE id = ?;
 ```
 
 ### 3.6 HTTP Status Semantics
 - **`401 UNAUTHORIZED`**: Missing, invalid, expired, or revoked token.
-- **`404 NOT FOUND`**: Entity exists in DB but belongs to another `siteId` or `organizationId` (strictly eliminates cross-site existence disclosure).
+- **`404 NOT FOUND`**: Entity exists in DB but belongs to another `siteId` or `organizationId` (existence defense).
 - **`403 FORBIDDEN`**: Entity is within caller's authorized scope, but caller lacks the required `Permission`.
 
 ---
@@ -166,17 +182,28 @@ WHERE id = ?
 ### 4.1 The Core Identity & Revocation Invariant
 > **"Every high-consequence authorization decision is validated against authoritative authorization state. Client-held tokens with stale roles, revoked sessions, or expired authorization versions are rejected immediately on the next request. System Administration is strictly decoupled from manufacturing quality authority."**
 
-### 4.2 Credential Standards & Anti-Enumeration
-1. **Credential Hashing Algorithms**:
-   - Human PINs & Passwords: **Argon2id / Bcrypt** (cost $\ge 12$, `VARCHAR(255)`).
-   - Machine Refresh Tokens & Service Keys: **SHA-256** (`VARCHAR(64)`). High entropy avoids bcrypt 72-byte truncation limits.
-2. **PIN Complexity Policy**:
+### 4.2 Credential Standards & Controlled Backfill Migration
+1. **Password & PIN Hashing Algorithm**:
+   - **Baseline Standard**: **Argon2id** (memory cost $\ge 64\,\text{MB}$, time cost $\ge 3$, parallelism $\ge 1$).
+   - **Supported Fallback**: **Bcrypt** with work factor cost $\ge 12$.
+   - Plaintext PINs/passwords are strictly forbidden in production storage.
+2. **Controlled Backfill Migration Strategy**:
+   - Existing databases with plaintext PINs undergo a verified one-time migration:
+     ```text
+     1. Add nullable pin_hash VARCHAR(255)
+     2. Iterate existing operators, hash plaintext PIN using Argon2id/Bcrypt
+     3. Verify each generated hash against source PIN
+     4. Alter column pin_hash SET NOT NULL
+     5. Drop plaintext pin column
+     ```
+   - **Zero Compatibility Compromise**: Plaintext columns are **never** retained permanently for backwards compatibility.
+3. **PIN Complexity Policy**:
    - `OPERATOR`: 4 to 8 numeric digits (leading zeros permitted, e.g. `"0429"`). Validated server-side via `^\d{4,8}$`.
    - Privileged Roles (`SUPERVISOR`, `PROCESS_ENGINEER`, `QA_DIRECTOR`, `SYSTEM_ADMIN`): Minimum **6 to 8 numeric digits** for kiosk PINs, or high-entropy passwords ($\ge 10$ chars with mixed case, numbers, and symbols).
-3. **Anti-User-Enumeration Invariant**:
-   - Unknown `operatorCode` executes `bcrypt.compare` against a pre-computed constant `DUMMY_PIN_HASH`.
+4. **Anti-User-Enumeration Invariant**:
+   - Unknown `operatorCode` executes constant-time dummy verification against a pre-computed constant `DUMMY_PIN_HASH`.
    - Returns identical `401 {"error": "INVALID_CREDENTIALS"}` payload and statistically bounded timing distribution as an invalid PIN for an existing operator.
-4. **Atomic Concurrency-Safe Lockout**:
+5. **Atomic Concurrency-Safe Lockout**:
    - Max 10 attempts/min per IP on `/api/v1/auth/login`.
    - 5 consecutive failures triggers an atomic SQL update:
      ```sql
@@ -189,7 +216,7 @@ WHERE id = ?
    - Early unlock requires a supervisor with `Permission.OPERATOR_MANAGE`, logging a mandatory audit reason.
 
 ### 4.3 Dual-Token Architecture & Token-Family Refresh Rotation
-* **Access JWT**: 15-minute TTL. Stored **strictly in memory** in the React application state.
+* **Access JWT**: 15-minute short-lived access JWT. **Browser stores access tokens only in volatile application memory** (never in `localStorage` or `sessionStorage`).
 * **Refresh Token**: 12-hour TTL. Stored **strictly in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie** (`__Host-mes-refresh`). Never accessible to JavaScript.
 * **Strict Cryptographic Contract**:
   - `alg`: Pinned strictly to `HS256`. Rejects `none` or asymmetric algorithm headers.
@@ -238,49 +265,12 @@ CREATE INDEX idx_refresh_lookup ON operator_refresh_tokens(session_id, token_has
 - **Fail-Closed Cache Hydration**: On cache miss (e.g. after container restart), securely reads `authz_version` from database and populates cache. If database read fails, request fails closed.
 - If `claims.authzVersion !== currentVersion`, request returns `401 TOKEN_STALE`.
 
-### 4.5 Non-Delegable Segregation of Duties (SoD)
-> **Invariant**: `SYSTEM_ADMIN` administers system configuration, operator credentials, and backups, but is **strictly barred from manufacturing quality approvals** (`REFLOW_PROFILE_APPROVE`, `QUALITY_GATE_OVERRIDE`, `DHR_RELEASE`, `LEDGER_SIGN`, `INTERLOCK_OVERRIDE`). High-consequence manufacturing capabilities are non-delegable to `SYSTEM_ADMIN`.
-
-#### Production SoD Matrix
-| Capability | `OPERATOR` | `SUPERVISOR` | `PROCESS_ENGINEER` | `QA_DIRECTOR` | `SYSTEM_ADMIN` |
-|---|:---:|:---:|:---:|:---:|:---:|
-| `REFLOW_PROFILE_UPLOAD` | NO | NO | **YES** | NO | NO |
-| `REFLOW_PROFILE_APPROVE` | NO | NO | NO | **YES** | **BLOCKED** |
-| `REFLOW_PROFILE_ACTIVATE` | NO | **YES** | NO | NO | **BLOCKED** |
-| `INTERLOCK_OVERRIDE` | NO | **YES** | NO | NO | **BLOCKED** |
-| `QUALITY_GATE_OVERRIDE` | NO | NO | NO | **YES** | **BLOCKED** |
-| `DHR_RELEASE` | NO | NO | NO | **YES** | **BLOCKED** |
-| `LEDGER_SIGN` | NO | NO | NO | **YES** | **BLOCKED** |
-| `OPERATOR_MANAGE` | NO | NO | NO | NO | **YES** |
-| `SYSTEM_CONFIG` | NO | NO | NO | NO | **YES** |
-| `CHAOS_EXECUTE` | NO | NO | NO | NO | **YES** |
-
+### 4.5 Dynamic Route Inventory Coverage & Capability-Based RBAC
+* **Dynamic Route Inventory Test**: Rather than freezing an arbitrary endpoint count, an automated route inventory test enumerates Express routes at test time and verifies that **every route not explicitly in the public allowlist** (`/health`, `/api/v1/auth/login`, `/api/v1/auth/refresh`) is protected by authentication middleware and permission checks.
+* **Non-Delegable Segregation of Duties (SoD)**:
+  `SYSTEM_ADMIN` administers system configuration, operator credentials, and backups, but is **strictly barred from manufacturing quality approvals** (`REFLOW_PROFILE_APPROVE`, `QUALITY_GATE_OVERRIDE`, `DHR_RELEASE`, `LEDGER_SIGN`, `INTERLOCK_OVERRIDE`).
 * **Domain-Level SoD Check**: In addition to role permissions, `ReflowProfileService` and `EdhrService` enforce:
   $$\text{creatorOperatorId} \neq \text{approverOperatorId}$$
-
-### 4.6 Service Credential Lifecycle with Multiple Active Keys
-```sql
-CREATE TABLE IF NOT EXISTS service_credentials (
-  id VARCHAR(64) PRIMARY KEY,
-  service_id VARCHAR(64) NOT NULL,
-  service_name VARCHAR(128) NOT NULL,
-  key_hash VARCHAR(64) NOT NULL, -- SHA-256(raw_key)
-  organization_id VARCHAR(64) NOT NULL,
-  site_id VARCHAR(64) NOT NULL,
-  permissions TEXT NOT NULL,
-  status VARCHAR(24) NOT NULL DEFAULT 'ACTIVE',
-  created_at TIMESTAMP NOT NULL,
-  expires_at TIMESTAMP NOT NULL,
-  last_used_at TIMESTAMP,
-  created_by VARCHAR(64) NOT NULL,
-  revoked_by VARCHAR(64),
-  revoked_at TIMESTAMP
-);
-
-CREATE INDEX idx_service_cred_lookup ON service_credentials(key_hash, status);
-CREATE INDEX idx_service_cred_service ON service_credentials(service_id, status);
-```
-Supports multiple concurrent active keys per service for seamless zero-downtime key rotation.
 
 ---
 
@@ -348,105 +338,63 @@ export interface SignedEnvelope {
 $$S_{\text{record}} = \text{SHA-256}(\text{canonicalize}(\text{SignedEnvelope}))$$
 $$H_{\text{block}}[N] = \text{SHA-256}\Big(N \parallel H_{\text{block}}[N-1] \parallel S_{\text{record}}\Big)$$
 
-### 5.4 Database Privilege Segregation & Transactional Outbox
-1. **Atomic Transaction**:
+### 5.4 Database Role Segregation & Append-Only Guarantees
+To prevent database administrators or runtime injection from mutating compliance records:
+1. **Schema Ownership**: The migration/schema owner role (`mes_migrator`) owns tables.
+2. **Runtime Role**: The application runtime role (`mes_runtime`) is granted **only `SELECT` and `INSERT`** on compliance ledger tables:
    ```sql
-   BEGIN TRANSACTION;
-     -- Append compliance_signatures block
-     -- Append event_outbox (COMPLIANCE_SIGNATURE_RECORDED)
-   COMMIT;
+   GRANT SELECT, INSERT ON compliance_signatures TO mes_runtime;
+   -- Explicitly denied:
+   REVOKE UPDATE, DELETE, TRUNCATE ON compliance_signatures FROM mes_runtime;
    ```
-2. **Database Engine Hardening**:
-   ```sql
-   GRANT SELECT, INSERT ON compliance_signatures TO mes_user;
-   REVOKE UPDATE, DELETE ON compliance_signatures FROM mes_user;
-   ```
-   The ledger is strictly append-only at the database engine level.
-
-### 5.5 §11.50 Signature Manifestation
-Displays and exports (PDF/eDHR) must render:
-1. Printed full name of signer (`operator_name`).
-2. Authoritative UTC date and time (`executedAt`).
-3. Meaning of signature (`meaning`).
+3. Because `mes_runtime` is **not the owner** of `compliance_signatures`, PostgreSQL owner-override privileges cannot be abused to circumvent table permissions.
 
 ---
 
 ## 6. Section 4: Edge Appliance Perimeter, Secrets & OT Hardening
 
-### 6.1 Perimeter Architecture & Docker Hardening (Gate 5)
+### 6.1 Perimeter Architecture & Docker Hardening
 * **Adminer Excised**: The open database management tool is permanently removed from all Docker Compose templates.
 * **PostgreSQL Port Publishing Removed**: Port `5432:5432` is removed from host publishing. PostgreSQL is reachable only by internal Docker containers on `mes_network`.
 * **Zero Default Passwords**: Docker Compose enforces mandatory environment variables (`${POSTGRES_USER:?error}`, `${POSTGRES_PASSWORD:?error}`).
-* **Caddy Gateway**: TLS 1.3 preferred, HSTS, strict CSP, automated HTTP $\rightarrow$ HTTPS redirect. `/metrics` blocked from external LAN.
+* **Caddy Gateway**: TLS 1.3 preferred, HSTS, strict CSP, automated HTTP $\rightarrow$ HTTPS redirect (port 80 issues 301 to 443). `/metrics` blocked from external LAN.
 
-### 6.2 Irreversible Appliance Bootstrap Lifecycle
-To eliminate persistent setup backdoors, appliance bootstrap is governed by a state machine backed by persistent database state:
-$$\text{UNINITIALIZED} \longrightarrow \text{BOOTSTRAPPING} \longrightarrow \text{INITIALIZED} \longrightarrow \text{BOOTSTRAP\_UNMOUNTED}$$
-- When `operators` table contains $\ge 1$ administrator, the appliance is in `INITIALIZED` state.
-- The `POST /api/v1/auth/bootstrap` route is **completely unmounted** from the Express router in production code. Any incoming request hits the 404/410 terminal gate.
+### 6.2 Transactional Appliance Onboarding & Bootstrap State Machine
+To eliminate persistent setup backdoors while preventing partially initialized appliances:
+$$\text{UNINITIALIZED} \xrightarrow{\text{start}} \text{PROVISIONING} \xrightarrow{\text{success}} \text{PRODUCTION\_ACTIVE} \longrightarrow \text{BOOTSTRAP\_UNMOUNTED}$$
+$$\text{PROVISIONING} \xrightarrow{\text{failure}} \text{PROVISIONING\_FAILED} \xrightarrow{\text{rollback}} \text{UNINITIALIZED}$$
 
-### 6.3 Replay-Resistant Internal Callbacks with Persistent Idempotency
-Internal asynchronous callbacks (e.g. background batch processing or async job completion) require cryptographic authentication:
-- `X-Timestamp`: Validated against server time within a $\pm 30\text{s}$ drift window.
-- `X-Nonce`: Validated against a database-backed idempotency table (`internal_callback_nonces`) to prevent replay attacks across process or container restarts:
-  ```sql
-  CREATE TABLE IF NOT EXISTS internal_callback_nonces (
-    nonce VARCHAR(64) PRIMARY KEY,
-    endpoint VARCHAR(128) NOT NULL,
-    received_at TIMESTAMP NOT NULL,
-    expires_at TIMESTAMP NOT NULL
-  );
-  ```
-- `X-Signature`: $\text{HMAC-SHA256}(\text{internalSecret}, \text{timestamp} + \text{nonce} + \text{bodyHash})$.
+- Provisioning executes in a single database transaction:
+  1. Create organization and initial site.
+  2. Create first `SYSTEM_ADMIN` credentials ($\ge 12$ chars).
+  3. Initialize ISA-95 asset hierarchy baseline.
+  4. Generate and store runtime secrets.
+- **Rollback Guarantee**: Any failure during provisioning rolls back the entire transaction to `UNINITIALIZED`. No partially configured state is ever left exposed.
+- Once in `PRODUCTION_ACTIVE`, the `/api/v1/auth/bootstrap` route is **completely unmounted** from the Express router in production code.
 
-### 6.4 Same-Origin Routing, Strict CSP & Appliance CA Onboarding
-1. **Zero-CORS Same-Origin Architecture**: Caddy serves the Cleanroom Operator HUD / Web UI and `/api/*` under a single origin (`https://mes.local/`). CORS headers are eliminated for internal application traffic.
-2. **Strict Content Security Policy (CSP)**:
-   ```text
-   default-src 'self';
-   script-src 'self';
-   connect-src 'self';
-   img-src 'self' data:;
-   font-src 'self';
-   object-src 'none';
-   base-uri 'self';
-   frame-ancestors 'none';
-   form-action 'self';
-   ```
-3. **Strict HTTPS (No Port 80 Fallback)**: Port 80 issues an unconditional `301 Moved Permanently` to port 443. Plaintext HTTP traffic is banned.
-4. **Appliance CA Onboarding**:
-   - Appliance exposes its internal CA root certificate for download (`GET /api/v1/security/ca.crt`).
-   - The Cockpit settings screen displays the CA SHA-256 fingerprint for manual verification.
-   - Enterprise deployments support uploading customer PKI certificates.
+### 6.3 OT/IIoT Perimeter Defense: Fuji Nexim Gateway
+To secure Fuji NXT III machine line communications without breaking OEM wire format compatibility:
+1. **Physical & Network Segmentation**: The Fuji TCP socket (port 30040) is bound strictly to a dedicated physical network interface / isolated machine VLAN. Port 30040 is physically inaccessible from office and business LANs.
+2. **Protocol Compatibility & Device Authentication**:
+   - If the installed Fuji Nexim software/hardware supports transport-level device authentication, enable native device credentials.
+   - If standard OEM machine controllers do not support custom cryptographic handshakes, apply **documented compensating controls**: dedicated OT VLAN + hardware firewall + monitored MAC/IP allowlist + physical machine port lockdown.
+3. **Defensive Socket Framing & DoS Protections**:
+   - Strict 64KB max buffer cap on incoming frame accumulator.
+   - 4-byte sync header validation.
+   - Immediate disconnect and connection purge upon corrupt length or malformed frame headers.
+   - 30-second idle socket timeout.
 
-### 6.5 Secrets Management & Startup Entropy Enforcement (Gate 6)
-* Production startup enforces $\ge 32$ cryptographically secure random bytes for `JWT_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `INTERNAL_API_SECRET`, and `POSTGRES_PASSWORD`.
-* Startup halts with exit code 1 if default or known patterns (`"admin"`, `"secret"`, `"12345"`) are detected.
-* `/api/v1/security/audit` is gated behind `requirePermission(Permission.AUDIT_VIEW)`.
-
-### 6.6 OT/IIoT Perimeter Defense: Fuji Nexim Gateway (Gate 9)
-1. **Physical & Network Segmentation**: OT interface bound strictly to dedicated machine network. Port 30040 is physically inaccessible from plant office LAN.
-2. **Dynamic Challenge-Response Handshake**:
-   - Gateway sends random 256-bit nonce upon connection.
-   - Machine controller proves possession of per-device key via `HMAC(nonce || deviceId || protocolVersion)`.
-   - Legacy machines without cryptographic firmware fall back strictly to documented compensating controls (isolated OT VLAN + hardware firewall + monitored IP allowlist).
-3. **Defensive Protocol Framing**: 64KB max buffer cap, sync header validation, corrupt length disconnect, 30s idle timeout.
-
-### 6.7 Egress Security & Socket Connection Pinning (Gate 8)
-- **Class-Based Egress Policy**:
-  - Internal service calls: restricted to registered service identities.
-  - External webhooks & enterprise integrations (ERP/PLM export): restricted to approved public HTTPS destinations.
-- **Socket-Level Connection Pinning**:
-  1. Resolves all A/AAAA records.
-  2. Validates against loopback, RFC1918, link-local (`169.254.0.0/16`), CGNAT, and IPv4-mapped IPv6.
-  3. Binds socket directly to the validated IP address, eliminating DNS rebinding attacks.
-  4. HTTP redirects disabled (`redirect: 'manual'`).
+### 6.4 Modular Egress Security: `SafeConnector`
+Outbound networking is segregated into modular policies built on top of a low-level, pinned connector:
+- **`SafeConnector`**: Handles DNS resolution, RFC1918/loopback/link-local/IPv4-mapped-IPv6 validation, socket IP pinning (defeating DNS rebinding), strict 5-second connection timeout, and redirect prohibition (`redirect: 'manual'`).
+- **`InternalServiceTargetPolicy`**: Verifies outbound destinations against known internal service identities.
+- **`WebhookTargetPolicy`**: Verifies outbound destinations against customer-configured, approved external HTTPS endpoints (e.g. enterprise ERP/PLM exports).
 
 ---
 
 ## 7. Section 5: Data Protection, Backup & Disaster Recovery Drill Pipeline
 
-### 7.1 Recovery Objectives & SLA Definition (Gate 10)
+### 7.1 Recovery Objectives & SLA Definition
 * **Measured RPO Target**: **$\le 15\text{ minutes}$** (Continuous WAL archiving in Postgres / 15-minute online SQLite backup snapshots).
 * **Demonstrated RTO Target**: **$\le 2\text{ hours}$** (Demonstrated during automated restore drills).
 
@@ -454,62 +402,51 @@ Internal asynchronous callbacks (e.g. background batch processing or async job c
 Backups bundle four synchronized tiers into an encrypted package (`mes-recovery-YYYYMMDD-HHMMSS.tar.gz`):
 1. **Relational Core**: Consistent DB snapshot with recorded `databaseRecoveryLSN`.
 2. **EventStore**: Append log and projection state up to recorded sequence number.
-3. **Physical Evidence**: Raw profiler runs, AOI inspection images, signed eDHR PDFs with signed `evidence-manifest.json` (listing path, size, SHA-256, source record ID).
+3. **Physical Evidence Scope**: 
+   - Managed artifact directories: `/var/data/dhr` (signed PDFs), `/var/data/reflow` (raw profiler data), `/var/data/inspection` (AOI/SPI images).
+   - Accompanied by signed `evidence-manifest.json` listing relative path, size, SHA-256 checksum, and corresponding database record ID.
+   - **The Strict Integrity Invariant**: 100% of artifacts registered in the backup manifest are verified, and every database record expected to reference a managed artifact has a corresponding manifest entry.
 4. **Configuration & Keystore**: Site configuration and encrypted credentials.
 
-#### Offline Key Escrow & Segregated Restore Classes
-- `BACKUP_ENCRYPTION_KEY`: AES-256-GCM. Stored off-appliance with a formal offline key custodian recovery procedure.
-- Restores separate `--restore-data`, `--restore-config`, and `--restore-secrets` to prevent accidental credential overwrites.
-
-### 7.3 Automated DR Drill Pipeline (`scripts/dr-drill.sh`)
-Executes an automated destructive drill in an isolated environment:
-1. Destroys test database.
-2. Restores recovery package.
-3. Verifies schema, EventStore monotonicity, compliance hash chain (`verifyIntegrity()`), and genealogy parity.
-4. Verifies 100% of evidence file hashes match manifest.
-5. Verifies cross-system integrity: missing evidence or orphaned DB references fail closed.
-6. Boots appliance and executes production smoke tests.
-7. Records `RPOSeconds` and `RTOSeconds`.
-8. **Incident Quarantine Rule**: Any ledger hash mismatch triggers automatic record quarantine and audit alert; automated "hash repairs" are strictly prohibited.
+### 7.3 Scheduled DR Drills & Persistent Evidence Retention
+1. **Automated Destructive Drill (`scripts/dr-drill.sh`)**:
+   - Restores recovery package into an isolated verification sandbox.
+   - Verifies schema, EventStore monotonicity, compliance hash chain (`verifyIntegrity()`), and 100% evidence file hashes.
+   - Boots application and runs production smoke tests.
+   - Calculates and records actual `RPOSeconds` and `RTOSeconds`.
+2. **Persistent Drill History Table**:
+   ```sql
+   CREATE TABLE IF NOT EXISTS dr_drill_history (
+     drill_id VARCHAR(64) PRIMARY KEY,
+     software_version VARCHAR(32) NOT NULL,
+     backup_id VARCHAR(64) NOT NULL,
+     backup_timestamp TIMESTAMP NOT NULL,
+     executed_at TIMESTAMP NOT NULL,
+     rpo_seconds INTEGER NOT NULL,
+     rto_seconds INTEGER NOT NULL,
+     status VARCHAR(24) NOT NULL, -- PASS, FAIL
+     evidence_summary TEXT NOT NULL
+   );
+   ```
+3. **Freshness Enforcement**: `mes doctor` verifies that the latest drill record exists, has status `PASS`, and has an age $\le 30$ days (or customer-configured maximum).
 
 ---
 
-## 8. Section 6: DevSecOps CI Gates, Rigorous Security Testing & MES Doctor CLI
+## 8. Section 6: DevSecOps CI Gates, Release Provenance & MES Doctor CLI
 
-### 8.1 Hardened DevSecOps Pipeline (Gate 11)
-- **`npm audit` Gate with Governed Exceptions**:
-  - Fails on High or Critical vulnerabilities.
-  - Exception path requires schema-validated `.audit-exceptions.json`:
-    ```json
-    {
-      "cve": "CVE-2026-XXXX",
-      "package": "example-pkg",
-      "rationale": "Vulnerable code path is not reachable in runtime execution path",
-      "expiresAt": "2026-10-15",
-      "approvedBy": "security-lead@mes-appliance.local"
-    }
-    ```
-  - Unapproved or expired exceptions fail the build.
-- **SAST & Secret Scanning**: Semgrep (OWASP Top 10) and Gitleaks active in CI. Any detected historical credential ever usable in production must be revoked/rotated, not merely deleted from Git.
-- **Container Scanning & SBOM**: Trivy base-image scan and CycloneDX SBOM generated on every build.
-- **Supply Chain Provenance**: Signed release manifest links:
-  $$\text{Git Commit SHA} \longrightarrow \text{Container Image Digest} \longrightarrow \text{SBOM Digest} \longrightarrow \text{Scan Attestations}$$
+### 8.1 CI Gates & Signed Release Provenance
+1. **Blocking CI Gates**:
+   - `npm audit` fails on High/Critical vulnerabilities unless covered by an unexpired, schema-validated entry in `.audit-exceptions.json`.
+   - Semgrep SAST, Gitleaks, Trivy container scans, and CycloneDX SBOM generation execute on every build.
+2. **Signed Release Manifest (`release-manifest.json`)**:
+   CI produces a cryptographically signed manifest linking:
+   $$\text{Git Commit SHA} \longrightarrow \text{Container Image Digest} \longrightarrow \text{SBOM Digest} \longrightarrow \text{CI Scan Attestations}$$
 
-### 8.2 Architectural Telemetry Separation Test
-Verifies that 100 Hz reflow telemetry enters `ITelemetryStore`, rolling statistics compute locally, and only derived discrete events enter `EventStore`. Asserts:
-$$\text{EventStore Event Count} \ll \text{Telemetry Sample Count}$$
-
-### 8.3 Productized Appliance Onboarding & Bootstrap Wizard (Gate 13)
-- First boot on empty database enters `PROVISIONING_MODE`.
-- Prompts for organization info, initial site context, and first `SYSTEM_ADMIN` password ($\ge 12$ chars).
-- Configures lines, equipment units, and backup targets.
-- Runs `mes doctor`. Upon PASS, seals `PROVISIONING_MODE` permanently.
-
-### 8.4 Automated Release Readiness CLI: `mes doctor` (Gate 14)
-CLI utility (`scripts/mes-doctor.ts` / `npm run doctor`) executes 12 structured diagnostic modules:
+### 8.2 Automated Release Readiness CLI: `mes doctor`
+The `mes doctor` CLI (`scripts/mes-doctor.ts` / `npm run doctor`) executes 12 structured diagnostic modules on the appliance:
 
 ```typescript
-interface DoctorResult {
+export interface DoctorResult {
   status: 'PASS' | 'FAIL' | 'NOT_VERIFIED';
   severity: 'BLOCKER' | 'WARNING' | 'INFO';
   evidence: string[];
@@ -517,9 +454,9 @@ interface DoctorResult {
 }
 ```
 
-* **Core Rule**: `NOT_VERIFIED` is **never** equivalent to `PASS`.
-* **Deterministic Readiness Policy**:
-  $$\text{CUSTOMER\_DEPLOYMENT\_READY} = (\text{Blockers} = 0) \land (\text{High Findings} = 0) \land (\text{Not Verified} = 0) \land (\text{DR Drill Recency} \le 30\text{d}) \land (\text{Secrets Valid}) \land (\text{TLS Valid}) \land (\text{Release Digest Verified})$$
+* **Attestation Verification (Not CI Simulation)**: Rather than claiming the deployed appliance ran Semgrep or Gitleaks locally, Doctor verifies the cryptographically signed release attestations and SBOM integrity:
+  `[12] DEVSECOPS RELEASE ATTESTATION ...... [ PASS ] Signed SBOM & clean CI attestations verified`
+* **Tri-State Policy Rule**: `NOT_VERIFIED` is strictly treated as failing deployment readiness.
 
 ```text
 $ npm run doctor
@@ -527,48 +464,32 @@ $ npm run doctor
 ================================================================================
    🏥 ANTIGRAVITY SMT MES — CUSTOMER RELEASE READINESS DOCTOR (v1.0.0)
 ================================================================================
-  [01] AUTHENTICATION BOUNDARY  ...... [ PASS ] Global auth on 55/55 endpoints
+  [01] AUTHENTICATION BOUNDARY  ...... [ PASS ] Complete route inventory authenticated
   [02] CAPABILITY-BASED RBAC    ...... [ PASS ] Segregation of Duties active
-  [03] SITE / ORG ISOLATION     ...... [ PASS ] Mandatory RequestContext enforced
-  [04] 21 CFR PART 11 LEDGER    ...... [ PASS ] Two-component PIN & hash chain verified
-  [05] OT GATEWAY DEFENSE       ...... [ PASS ] Dedicated network & challenge-response
-  [06] SECRETS MANAGEMENT       ...... [ PASS ] Zero default credentials; 256-bit entropy
-  [07] PERIMETER & TLS (CADDY)  ...... [ PASS ] TLS 1.3, CSP, HSTS, no exposed DB ports
-  [08] SSRF PINNING PROTECTION  ...... [ PASS ] Egress policy active; DNS rebinding blocked
-  [09] RECOVERY & BACKUP DRILL  ...... [ PASS ] Restore verified; RPO <= 15m, RTO <= 2h
+  [03] SITE / ORG ISOLATION     ...... [ PASS ] Scoped persistence enforced (Global/Org/Site)
+  [04] 21 CFR PART 11 LEDGER    ...... [ PASS ] Two-component PIN & non-owner append-only verified
+  [05] OT GATEWAY DEFENSE       ...... [ PASS ] Dedicated network & framing DoS guards active
+  [06] SECRETS MANAGEMENT       ...... [ PASS ] Zero default credentials; 256-bit entropy verified
+  [07] PERIMETER & TLS (CADDY)  ...... [ PASS ] TLS 1.3, CSP, HSTS, internal DB networking
+  [08] SSRF PINNING PROTECTION  ...... [ PASS ] SafeConnector active; DNS rebinding blocked
+  [09] RECOVERY & BACKUP DRILL  ...... [ PASS ] Persistent drill history verified; RPO <= 15m, RTO <= 2h
   [10] DELETED COMPOSE ADMINER  ...... [ PASS ] Unused admin GUIs completely removed
   [11] OPERATOR PIN HASHING     ...... [ PASS ] 0 plaintext PINs; Argon2id/Bcrypt enforced
-  [12] DEVSECOPS CI GATES       ...... [ PASS ] npm audit, Semgrep, Gitleaks, Trivy active
+  [12] DEVSECOPS ATTESTATIONS   ...... [ PASS ] Signed release manifest & clean scans verified
 --------------------------------------------------------------------------------
 OVERALL READINESS STATUS: [ CUSTOMER DEPLOYMENT READY: YES ]
-Blockers: 0 | High findings: 0 | Warnings: 1 | Not Verified: 0
+Blockers: 0 | Critical: 0 | High findings: 0 | Warnings: 1 | Not Verified: 0
 Release: Antigravity SMT MES 1.0.0 | Commit: 9ccdab1 | Image: mes-api@sha256:4f8e...
-SBOM: VERIFIED | Policy: v1 | Checked: 2026-09-09T14:30:00Z
-Target Readiness Score: >= 9.0 / 10 (Subject to post-implementation re-audit)
+SBOM: VERIFIED | Checked: 2026-09-09T14:30:00Z
 ================================================================================
 ```
 
 ---
 
-## 9. Projected Readiness Transformation
+## 9. Section 7: Final Acceptance Criteria & Independent Re-Audit
 
-| Dimension | Initial Audit Score | Target Release Score | Justification & Verification Evidence |
-|---|:---:|:---:|---|
-| **Authentication** | 0.5 / 10 | **$\ge 9.0$ / 10** | Default-deny on 55/55 endpoints; dual-token JWT; anti-stale `authzVersion`; instant revocation. |
-| **RBAC / Authorization** | 0.5 / 10 | **$\ge 9.0$ / 10** | Capability-based permissions; strict SoD (System Admin decoupled from Quality). |
-| **Session & Credentials** | 1.0 / 10 | **$\ge 9.0$ / 10** | Argon2id/Bcrypt for PINs; SHA-256 for tokens; token-family refresh rotation; anti-enumeration. |
-| **Part 11 / E-Signatures** | 4.0 / 10 | **$\ge 9.0$ / 10** | Server-derived identity; two-component PIN re-auth; canonical envelope hash; version linkage. |
-| **Tenant / Site Isolation** | 1.0 / 10 | **$\ge 9.0$ / 10** | Mandatory `RequestContext`; scoped repository factory; 404 existence defense. |
-| **Perimeter & Deployment** | 5.0 / 10 | **$\ge 9.0$ / 10** | Caddy TLS 1.3; Adminer excised; internal DB networking; zero default Compose passwords. |
-| **OT / IIoT Security** | 5.0 / 10 | **$\ge 8.5$ / 10** | Challenge-response handshake; dedicated host firewall routing; 64KB buffer defense. |
-| **DevSecOps** | 3.0 / 10 | **$\ge 9.0$ / 10** | Blocking `npm audit` with governed exceptions; Semgrep SAST; Gitleaks; Trivy; CycloneDX SBOM. |
-| **Reliability & DR** | 0.0 / 10 | **$\ge 9.0$ / 10** | Point-in-time recovery packages; automated restore drill script; measured RPO $\le 15$m, RTO $\le 2$h. |
-| **Testing** | 5.0 / 10 | **$\ge 9.0$ / 10** | Expanded security test suites; cross-site isolation; concurrency races; benchmark budgets. |
-| **Productization** | 3.0 / 10 | **$\ge 8.5$ / 10** | Appliance onboarding bootstrap wizard; removal of hardcoded demo seed; `mes doctor`. |
-| **Data Integrity** | 6.0 / 10 | **$\ge 9.0$ / 10** | Hash chain backed by authenticated identity and database-level append-only privileges. |
-| **Traceability** | 7.0 / 10 | **$\ge 8.5$ / 10** | Forward/backward trace preserved across backup/restore drills and site-scoped boundaries. |
-| **Architecture** | 7.0 / 10 | **$\ge 8.5$ / 10** | Clean 3-tier event-sourcing with strict persistence scoping and telemetry separation. |
-| **Overall Target** | **~4.3 / 10** | **$\ge 9.0\text{ / }10$** | **Production-ready, edge-native SMT quality & compliance appliance.** |
+### 9.1 Deterministic Findings-Based Release Gate
+Commercial release approval is strictly findings-based:
+$$\text{DEPLOYMENT\_APPROVAL} \iff (\text{BLOCKERS} = 0) \land (\text{CRITICAL} = 0) \land (\text{UNACCEPTED HIGH} = 0) \land (\text{DOCTOR} = \text{PASS}) \land (\text{DR} = \text{VERIFIED}) \land (\text{SECURITY TESTS} = \text{PASS})$$
 
----
-*End of Specification — Frozen for Implementation Planning.*
+Readiness scores are computed as post-audit output from objective evidence, never asserted prior to independent verification.
