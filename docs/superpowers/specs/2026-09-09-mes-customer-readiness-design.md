@@ -1,6 +1,6 @@
-# VigilOne MES — Customer-Site Readiness, Security Hardening & Enterprise Appliance Specification
-**Document ID:** SPEC-VIGILONE-2026-01  
-**Target Release:** VigilOne v1.0.0 (Production Customer Release)  
+# Antigravity SMT MES — Customer-Site Readiness, Security Hardening & Enterprise Appliance Specification
+**Document ID:** SPEC-MES-2026-01  
+**Target Release:** Antigravity SMT MES v1.0.0 (Production Customer Release)  
 **Status:** APPROVED & FROZEN  
 **Date:** 2026-09-09  
 
@@ -16,7 +16,7 @@ An exhaustive, independent static code and architecture audit of the **Antigravi
 * **Composite Baseline Score**: **~4.3 / 10** (Disqualified from commercial sale or deployment without remediation).
 
 ### The Strategic Directive
-> **"Do not rewrite the SMT manufacturing core or convert VigilOne into a multi-million-line generic ERP/MES like Siemens Opcenter. Harden the perimeter, establish trustworthy identity, make recovery real, prove it under test, and productize deployment as a dedicated single-tenant, single-plant edge appliance."**
+> **"Do not rewrite the SMT manufacturing core or convert the Antigravity SMT MES into a multi-million-line generic ERP/MES like Siemens Opcenter. Harden the perimeter, establish trustworthy identity, make recovery real, prove it under test, and productize deployment as a dedicated single-tenant, single-plant edge appliance."**
 
 This specification establishes the technical architecture, security invariants, data schemas, API contracts, and verification gates required to systematically elevate every audit dimension to a **Target Readiness Score of $\ge 9.0\text{ / }10$**, subject to independent post-implementation re-audit.
 
@@ -43,8 +43,8 @@ To eliminate ambiguity between numbered security findings and broader architectu
 | **D.13** | Reliability | Silent error swallowing (`catch {}`) on MSL enrichment | **Low** | Section 1 | `tests/msl-reliability.test.ts` |
 | **D.14** | Security | Single shared static API key, no revocation or rotation | **Medium** | Section 2 | `tests/service-credentials.test.ts` |
 | **E.5** | Reliability | Zero backup/restore/disaster recovery mechanism (RPO/RTO) | **Blocker** | Section 5 | `tests/disaster-recovery.test.ts` |
-| **E.8** | Integration | Outbound SSRF risks on webhooks and camera probes | **Medium** | Section 4 | `tests/ssrf-socket-pinning.test.ts` |
-| **E.18** | Product | Hardcoded demo tenant seed ("Dixon Noida Line 01") | **Medium** | Section 6 | `scripts/vigilone-doctor.ts` |
+| **E.8** | Integration | Outbound SSRF risks on webhooks and external integrations | **Medium** | Section 4 | `tests/ssrf-socket-pinning.test.ts` |
+| **E.18** | Product | Hardcoded demo tenant seed ("Dixon Noida Line 01") | **Medium** | Section 6 | `scripts/mes-doctor.ts` |
 
 ---
 
@@ -54,7 +54,7 @@ To eliminate ambiguity between numbered security findings and broader architectu
 > **"No application-level database access occurs without an explicit authenticated human or service security context, and no context can originate tenant, site, role, or operator identity from client-controlled request data."**
 
 ### 3.2 Single-Tenant Edge Appliance Deployment Model (Gate 0)
-* **Appliance Boundary**: VigilOne is packaged and deployed as a dedicated single-tenant, single-plant edge appliance per customer factory.
+* **Appliance Boundary**: Antigravity SMT MES is packaged and deployed as a dedicated single-tenant, single-plant edge appliance per customer factory.
 * **ISA-95 Hierarchy**:
   $$\text{Organization (1)} \longrightarrow \text{Site (1+)} \longrightarrow \text{Area (1+)} \longrightarrow \text{Production Line (1+)} \longrightarrow \text{Work Center} \longrightarrow \text{Equipment Unit}$$
 * **Deterministic Active Site Scope**: While an enterprise may own multiple sites, **each authenticated session is bound strictly to exactly one active `siteId`**.
@@ -190,10 +190,10 @@ WHERE id = ?
 
 ### 4.3 Dual-Token Architecture & Token-Family Refresh Rotation
 * **Access JWT**: 15-minute TTL. Stored **strictly in memory** in the React application state.
-* **Refresh Token**: 12-hour TTL. Stored **strictly in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie** (`__Host-vigilone-refresh`). Never accessible to JavaScript.
+* **Refresh Token**: 12-hour TTL. Stored **strictly in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie** (`__Host-mes-refresh`). Never accessible to JavaScript.
 * **Strict Cryptographic Contract**:
   - `alg`: Pinned strictly to `HS256`. Rejects `none` or asymmetric algorithm headers.
-  - `iss`: `"VigilOne"`, `aud`: `"vigilone-api"`.
+  - `iss`: `"Antigravity-MES"`, `aud`: `"mes-api"`.
   - Claims: `sub`, `kind: 'HUMAN'`, `code`, `name`, `role`, `permissions`, `org`, `site`, `sid`, `authzVersion`, `iat`, `exp`.
 
 ```sql
@@ -287,7 +287,7 @@ Supports multiple concurrent active keys per service for seamless zero-downtime 
 ## 5. Section 3: Attributable 21 CFR Part 11 E-Signature & Audit Ledger Engine
 
 ### 5.1 Regulatory Scope Statement
-> "VigilOne implements technical controls designed to support applicable **21 CFR Part 11** electronic-record and electronic-signature requirements (specifically §11.10 controls for closed systems, §11.50 signature manifestations, §11.70 record linkage, §11.100 signature uniqueness, and §11.200 electronic signature components). Operational compliance remains a shared responsibility requiring customer-specific validation (IQ/OQ/PQ), standard operating procedures (SOPs), training, and formal certification under §11.100(c)."
+> "Antigravity SMT MES implements technical controls designed to support applicable **21 CFR Part 11** electronic-record and electronic-signature requirements (specifically §11.10 controls for closed systems, §11.50 signature manifestations, §11.70 record linkage, §11.100 signature uniqueness, and §11.200 electronic signature components). Operational compliance remains a shared responsibility requiring customer-specific validation (IQ/OQ/PQ), standard operating procedures (SOPs), training, and formal certification under §11.100(c)."
 
 ### 5.2 Two-Component Electronic Signature Protocol
 In accordance with 21 CFR §11.200:
@@ -371,44 +371,22 @@ Displays and exports (PDF/eDHR) must render:
 
 ---
 
-## 6. Section 4: Edge Appliance Perimeter, Evidentiary Invariants & OT Hardening
+## 6. Section 4: Edge Appliance Perimeter, Secrets & OT Hardening
 
 ### 6.1 Perimeter Architecture & Docker Hardening (Gate 5)
 * **Adminer Excised**: The open database management tool is permanently removed from all Docker Compose templates.
-* **PostgreSQL Port Publishing Removed**: Port `5432:5432` is removed from host publishing. PostgreSQL is reachable only by internal Docker containers on `mes_internal`.
+* **PostgreSQL Port Publishing Removed**: Port `5432:5432` is removed from host publishing. PostgreSQL is reachable only by internal Docker containers on `mes_network`.
 * **Zero Default Passwords**: Docker Compose enforces mandatory environment variables (`${POSTGRES_USER:?error}`, `${POSTGRES_PASSWORD:?error}`).
 * **Caddy Gateway**: TLS 1.3 preferred, HSTS, strict CSP, automated HTTP $\rightarrow$ HTTPS redirect. `/metrics` blocked from external LAN.
 
-### 6.2 Evidentiary Invariants: Media Ingress Isolation & Provenance Chain
-To prevent unauthenticated or synthetic video from entering legal/compliance evidence archives:
-1. **Host RTSP Port 8554 Excised**: Port `8554:8554` is **completely removed from host publishing**. MediaMTX resides exclusively on the private Docker/Camera VLAN network. Cameras are ingested via private RTSP pull.
-2. **Separation of Ingest Credentials**: If external RTSP publishing is required for specialized edge encoders, credentials must be per-stream machine tokens (`stream_id`, `camera_id`, `purpose = 'publish'`, `expires_at`). User session JWTs are strictly forbidden for media ingress.
-3. **Immutable Recording Provenance Structure**:
-   ```typescript
-   export interface RecordedSegmentProvenance {
-     readonly segmentId: string;
-     readonly cameraId: string;
-     readonly streamPath: string;
-     readonly mediaSessionId: string;
-     readonly sourceAddress: string;
-     readonly ingestCredentialId: string;
-     readonly sessionStart: string;
-     readonly sessionEnd: string;
-     readonly segmentHash: string;
-     readonly previousSegmentHash: string;
-     readonly origin: 'AUTHENTICATED_CAMERA' | 'INTERNAL_TEST' | 'IMPORTED_MEDIA' | 'RECOVERED_STREAM';
-   }
-   ```
-   *Hard Evidentiary Invariant*: Segments originating from `INTERNAL_TEST`, `IMPORTED_MEDIA`, or `RECOVERED_STREAM` are cryptographically tagged and can **never** be exported or signed as `AUTHENTICATED_CAMERA` factory evidence.
-
-### 6.3 Irreversible Appliance Bootstrap Lifecycle
+### 6.2 Irreversible Appliance Bootstrap Lifecycle
 To eliminate persistent setup backdoors, appliance bootstrap is governed by a state machine backed by persistent database state:
 $$\text{UNINITIALIZED} \longrightarrow \text{BOOTSTRAPPING} \longrightarrow \text{INITIALIZED} \longrightarrow \text{BOOTSTRAP\_UNMOUNTED}$$
 - When `operators` table contains $\ge 1$ administrator, the appliance is in `INITIALIZED` state.
 - The `POST /api/v1/auth/bootstrap` route is **completely unmounted** from the Express router in production code. Any incoming request hits the 404/410 terminal gate.
 
-### 6.4 Replay-Resistant Internal Callbacks with Persistent Idempotency
-Internal asynchronous callbacks (e.g. `POST /api/v1/internal/segment-complete`) require cryptographic authentication:
+### 6.3 Replay-Resistant Internal Callbacks with Persistent Idempotency
+Internal asynchronous callbacks (e.g. background batch processing or async job completion) require cryptographic authentication:
 - `X-Timestamp`: Validated against server time within a $\pm 30\text{s}$ drift window.
 - `X-Nonce`: Validated against a database-backed idempotency table (`internal_callback_nonces`) to prevent replay attacks across process or container restarts:
   ```sql
@@ -421,15 +399,14 @@ Internal asynchronous callbacks (e.g. `POST /api/v1/internal/segment-complete`) 
   ```
 - `X-Signature`: $\text{HMAC-SHA256}(\text{internalSecret}, \text{timestamp} + \text{nonce} + \text{bodyHash})$.
 
-### 6.5 Same-Origin Routing, Strict CSP & Appliance CA Onboarding
-1. **Zero-CORS Same-Origin Architecture**: Caddy serves the Web Cockpit, `/api/*`, and media streams (`/whep/*`, `/hls/*`) under a single origin (`https://vigilone.local/`). CORS headers are eliminated for internal application traffic.
+### 6.4 Same-Origin Routing, Strict CSP & Appliance CA Onboarding
+1. **Zero-CORS Same-Origin Architecture**: Caddy serves the Cleanroom Operator HUD / Web UI and `/api/*` under a single origin (`https://mes.local/`). CORS headers are eliminated for internal application traffic.
 2. **Strict Content Security Policy (CSP)**:
    ```text
    default-src 'self';
    script-src 'self';
    connect-src 'self';
-   media-src 'self' blob: mediastream:;
-   img-src 'self' data: blob:;
+   img-src 'self' data:;
    font-src 'self';
    object-src 'none';
    base-uri 'self';
@@ -442,12 +419,12 @@ Internal asynchronous callbacks (e.g. `POST /api/v1/internal/segment-complete`) 
    - The Cockpit settings screen displays the CA SHA-256 fingerprint for manual verification.
    - Enterprise deployments support uploading customer PKI certificates.
 
-### 6.6 Secrets Management & Startup Entropy Enforcement (Gate 6)
-* Production startup enforces $\ge 32$ cryptographically secure random bytes for `JWT_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `INTERNAL_API_SECRET`, `COTURN_SECRET`, and `POSTGRES_PASSWORD`.
+### 6.5 Secrets Management & Startup Entropy Enforcement (Gate 6)
+* Production startup enforces $\ge 32$ cryptographically secure random bytes for `JWT_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`, `INTERNAL_API_SECRET`, and `POSTGRES_PASSWORD`.
 * Startup halts with exit code 1 if default or known patterns (`"admin"`, `"secret"`, `"12345"`) are detected.
 * `/api/v1/security/audit` is gated behind `requirePermission(Permission.AUDIT_VIEW)`.
 
-### 6.7 OT/IIoT Perimeter Defense: Fuji Nexim Gateway (Gate 9)
+### 6.6 OT/IIoT Perimeter Defense: Fuji Nexim Gateway (Gate 9)
 1. **Physical & Network Segmentation**: OT interface bound strictly to dedicated machine network. Port 30040 is physically inaccessible from plant office LAN.
 2. **Dynamic Challenge-Response Handshake**:
    - Gateway sends random 256-bit nonce upon connection.
@@ -455,11 +432,10 @@ Internal asynchronous callbacks (e.g. `POST /api/v1/internal/segment-complete`) 
    - Legacy machines without cryptographic firmware fall back strictly to documented compensating controls (isolated OT VLAN + hardware firewall + monitored IP allowlist).
 3. **Defensive Protocol Framing**: 64KB max buffer cap, sync header validation, corrupt length disconnect, 30s idle timeout.
 
-### 6.8 Egress Security & Socket Connection Pinning (Gate 8)
+### 6.7 Egress Security & Socket Connection Pinning (Gate 8)
 - **Class-Based Egress Policy**:
-  - ONVIF camera probes: restricted to factory camera CIDRs.
   - Internal service calls: restricted to registered service identities.
-  - External webhooks: restricted to approved public HTTPS destinations.
+  - External webhooks & enterprise integrations (ERP/PLM export): restricted to approved public HTTPS destinations.
 - **Socket-Level Connection Pinning**:
   1. Resolves all A/AAAA records.
   2. Validates against loopback, RFC1918, link-local (`169.254.0.0/16`), CGNAT, and IPv4-mapped IPv6.
@@ -475,10 +451,10 @@ Internal asynchronous callbacks (e.g. `POST /api/v1/internal/segment-complete`) 
 * **Demonstrated RTO Target**: **$\le 2\text{ hours}$** (Demonstrated during automated restore drills).
 
 ### 7.2 Point-in-Time Recovery Package Architecture
-Backups bundle four synchronized tiers into an encrypted package (`vigilone-recovery-YYYYMMDD-HHMMSS.tar.gz`):
+Backups bundle four synchronized tiers into an encrypted package (`mes-recovery-YYYYMMDD-HHMMSS.tar.gz`):
 1. **Relational Core**: Consistent DB snapshot with recorded `databaseRecoveryLSN`.
 2. **EventStore**: Append log and projection state up to recorded sequence number.
-3. **Physical Evidence**: Raw profiler runs, AOI images, signed eDHR PDFs with signed `evidence-manifest.json` (listing path, size, SHA-256, source record ID).
+3. **Physical Evidence**: Raw profiler runs, AOI inspection images, signed eDHR PDFs with signed `evidence-manifest.json` (listing path, size, SHA-256, source record ID).
 4. **Configuration & Keystore**: Site configuration and encrypted credentials.
 
 #### Offline Key Escrow & Segregated Restore Classes
@@ -498,7 +474,7 @@ Executes an automated destructive drill in an isolated environment:
 
 ---
 
-## 8. Section 6: DevSecOps CI Gates, Rigorous Security Testing & VigilOne Doctor CLI
+## 8. Section 6: DevSecOps CI Gates, Rigorous Security Testing & MES Doctor CLI
 
 ### 8.1 Hardened DevSecOps Pipeline (Gate 11)
 - **`npm audit` Gate with Governed Exceptions**:
@@ -508,9 +484,9 @@ Executes an automated destructive drill in an isolated environment:
     {
       "cve": "CVE-2026-XXXX",
       "package": "example-pkg",
-      "rationale": "Vulnerable code path is not reachable in VigilOne runtime",
+      "rationale": "Vulnerable code path is not reachable in runtime execution path",
       "expiresAt": "2026-10-15",
-      "approvedBy": "security-lead@vigilone.com"
+      "approvedBy": "security-lead@mes-appliance.local"
     }
     ```
   - Unapproved or expired exceptions fail the build.
@@ -527,10 +503,10 @@ $$\text{EventStore Event Count} \ll \text{Telemetry Sample Count}$$
 - First boot on empty database enters `PROVISIONING_MODE`.
 - Prompts for organization info, initial site context, and first `SYSTEM_ADMIN` password ($\ge 12$ chars).
 - Configures lines, equipment units, and backup targets.
-- Runs `vigilone doctor`. Upon PASS, seals `PROVISIONING_MODE` permanently.
+- Runs `mes doctor`. Upon PASS, seals `PROVISIONING_MODE` permanently.
 
-### 8.4 Automated Release Readiness CLI: `vigilone doctor` (Gate 14)
-CLI utility (`scripts/vigilone-doctor.ts` / `npm run doctor`) executes 12 structured diagnostic modules:
+### 8.4 Automated Release Readiness CLI: `mes doctor` (Gate 14)
+CLI utility (`scripts/mes-doctor.ts` / `npm run doctor`) executes 12 structured diagnostic modules:
 
 ```typescript
 interface DoctorResult {
@@ -549,7 +525,7 @@ interface DoctorResult {
 $ npm run doctor
 
 ================================================================================
-   🏥 VIGILONE SMT MES — CUSTOMER RELEASE READINESS DOCTOR (v1.0.0)
+   🏥 ANTIGRAVITY SMT MES — CUSTOMER RELEASE READINESS DOCTOR (v1.0.0)
 ================================================================================
   [01] AUTHENTICATION BOUNDARY  ...... [ PASS ] Global auth on 55/55 endpoints
   [02] CAPABILITY-BASED RBAC    ...... [ PASS ] Segregation of Duties active
@@ -566,7 +542,7 @@ $ npm run doctor
 --------------------------------------------------------------------------------
 OVERALL READINESS STATUS: [ CUSTOMER DEPLOYMENT READY: YES ]
 Blockers: 0 | High findings: 0 | Warnings: 1 | Not Verified: 0
-Release: VigilOne 1.0.0 | Commit: 9ccdab1 | Image: vigilone-api@sha256:4f8e...
+Release: Antigravity SMT MES 1.0.0 | Commit: 9ccdab1 | Image: mes-api@sha256:4f8e...
 SBOM: VERIFIED | Policy: v1 | Checked: 2026-09-09T14:30:00Z
 Target Readiness Score: >= 9.0 / 10 (Subject to post-implementation re-audit)
 ================================================================================
@@ -583,12 +559,12 @@ Target Readiness Score: >= 9.0 / 10 (Subject to post-implementation re-audit)
 | **Session & Credentials** | 1.0 / 10 | **$\ge 9.0$ / 10** | Argon2id/Bcrypt for PINs; SHA-256 for tokens; token-family refresh rotation; anti-enumeration. |
 | **Part 11 / E-Signatures** | 4.0 / 10 | **$\ge 9.0$ / 10** | Server-derived identity; two-component PIN re-auth; canonical envelope hash; version linkage. |
 | **Tenant / Site Isolation** | 1.0 / 10 | **$\ge 9.0$ / 10** | Mandatory `RequestContext`; scoped repository factory; 404 existence defense. |
-| **Perimeter & Deployment** | 5.0 / 10 | **$\ge 9.0$ / 10** | Caddy TLS 1.3; Adminer excised; internal DB networking; zero default Compose passwords; port 8554 excised. |
+| **Perimeter & Deployment** | 5.0 / 10 | **$\ge 9.0$ / 10** | Caddy TLS 1.3; Adminer excised; internal DB networking; zero default Compose passwords. |
 | **OT / IIoT Security** | 5.0 / 10 | **$\ge 8.5$ / 10** | Challenge-response handshake; dedicated host firewall routing; 64KB buffer defense. |
 | **DevSecOps** | 3.0 / 10 | **$\ge 9.0$ / 10** | Blocking `npm audit` with governed exceptions; Semgrep SAST; Gitleaks; Trivy; CycloneDX SBOM. |
 | **Reliability & DR** | 0.0 / 10 | **$\ge 9.0$ / 10** | Point-in-time recovery packages; automated restore drill script; measured RPO $\le 15$m, RTO $\le 2$h. |
 | **Testing** | 5.0 / 10 | **$\ge 9.0$ / 10** | Expanded security test suites; cross-site isolation; concurrency races; benchmark budgets. |
-| **Productization** | 3.0 / 10 | **$\ge 8.5$ / 10** | Appliance onboarding bootstrap wizard; removal of hardcoded demo seed; `vigilone doctor`. |
+| **Productization** | 3.0 / 10 | **$\ge 8.5$ / 10** | Appliance onboarding bootstrap wizard; removal of hardcoded demo seed; `mes doctor`. |
 | **Data Integrity** | 6.0 / 10 | **$\ge 9.0$ / 10** | Hash chain backed by authenticated identity and database-level append-only privileges. |
 | **Traceability** | 7.0 / 10 | **$\ge 8.5$ / 10** | Forward/backward trace preserved across backup/restore drills and site-scoped boundaries. |
 | **Architecture** | 7.0 / 10 | **$\ge 8.5$ / 10** | Clean 3-tier event-sourcing with strict persistence scoping and telemetry separation. |
