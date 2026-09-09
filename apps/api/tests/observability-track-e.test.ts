@@ -8,15 +8,27 @@ import { seedDatabase } from '../src/db/seed';
 import { MetricsService } from '../src/services/metrics.service';
 import { SloMonitorService } from '../src/services/slo-monitor.service';
 import { ChaosInjectionService } from '../src/services/chaos-injection.service';
+import { TokenManager } from '../src/security/jwt';
 
 describe('Track E: Observability, SRE & Chaos Engineering Suite', () => {
   let server: http.Server;
   let baseUrl: string;
+  let adminToken: string;
   const rootDir = path.resolve(__dirname, '../../..');
 
   beforeAll(async () => {
     await initDatabase();
     await seedDatabase();
+
+    adminToken = TokenManager.generateAccessToken({
+      sub: 'admin-01',
+      code: 'SYS-ADMIN-01',
+      name: 'SRE System Admin',
+      role: 'SYSTEM_ADMIN',
+      org: 'org-dixon',
+      site: 'site-noida-p4',
+      authzVersion: 1
+    });
 
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -93,7 +105,9 @@ describe('Track E: Observability, SRE & Chaos Engineering Suite', () => {
     expect(ledgerSlo?.currentSli).toBe(100.0);
 
     // Verify REST API endpoint /api/v1/sre/slos
-    const apiRes = await fetch(`${baseUrl}/api/v1/sre/slos`);
+    const apiRes = await fetch(`${baseUrl}/api/v1/sre/slos`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
     expect(apiRes.status).toBe(200);
     const apiData = await apiRes.json();
     expect(apiData.success).toBe(true);
@@ -146,7 +160,10 @@ describe('Track E: Observability, SRE & Chaos Engineering Suite', () => {
     // 3. Verify REST API endpoint /api/v1/sre/chaos/run
     const apiRes = await fetch(`${baseUrl}/api/v1/sre/chaos/run`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
       body: JSON.stringify({
         experimentId: 'exp-api-test-01',
         target: 'work-center-nxt',

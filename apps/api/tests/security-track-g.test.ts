@@ -8,15 +8,27 @@ import { IpFirewall } from '../src/security/ip-firewall';
 import { SimpleRateLimiter } from '../src/security/http-security';
 import { SecretsConfigManager } from '../src/config/secrets';
 import { FujiNeximAdapter } from '../src/adapters/fuji-nexim.adapter';
+import { TokenManager } from '../src/security/jwt';
 import express from 'express';
 
 describe('Track G: Security Hardening & Secrets Hygiene Suite', () => {
   let server: http.Server;
   let baseUrl: string;
+  let adminToken: string;
 
   beforeAll(async () => {
     await initDatabase();
     await seedDatabase();
+
+    adminToken = TokenManager.generateAccessToken({
+      sub: 'admin-01',
+      code: 'SYS-ADMIN-01',
+      name: 'Security Admin',
+      role: 'SYSTEM_ADMIN',
+      org: 'org-dixon',
+      site: 'site-noida-p4',
+      authzVersion: 1
+    });
 
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -209,7 +221,9 @@ describe('Track G: Security Hardening & Secrets Hygiene Suite', () => {
     });
 
     it('exposes sanitized security audit report without leaking plain secrets', async () => {
-      const res = await fetch(`${baseUrl}/api/v1/security/audit`);
+      const res = await fetch(`${baseUrl}/api/v1/security/audit`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
       expect(res.status).toBe(200);
 
       const json = await res.json();

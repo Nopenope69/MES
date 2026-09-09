@@ -49,4 +49,12 @@ export class TrustedProxyResolver {
 
     return remoteAddress;
   }
+
+  /**
+   * Extracts client IP address respecting trusted reverse proxy boundaries.
+   * Alias for resolveClientIp.
+   */
+  public static extractClientIp(req: Request): string {
+    return this.resolveClientIp(req);
+  }
 }

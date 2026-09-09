@@ -4,16 +4,28 @@ import { seedDatabase } from '../src/db/seed';
 import { SplicingAuthorizationService } from '../src/services/splicing-authorization.service';
 import { FujiNeximAdapter } from '../src/adapters/fuji-nexim.adapter';
 import { app } from '../src/server';
+import { TokenManager } from '../src/security/jwt';
 import http from 'http';
 
 describe('SplicingAuthorizationService (Unified Quality Gate Suite)', () => {
   const adapter = new FujiNeximAdapter();
   let server: http.Server;
   let baseUrl: string;
+  let operatorToken: string;
 
   beforeAll(async () => {
     await initDatabase();
     await seedDatabase();
+
+    operatorToken = TokenManager.generateAccessToken({
+      sub: 'op-smt-01',
+      code: 'OP-SMT-01',
+      name: 'Vikram Singh',
+      role: 'OPERATOR',
+      org: 'org-dixon',
+      site: 'site-noida-p4',
+      authzVersion: 1
+    });
 
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -123,7 +135,10 @@ describe('SplicingAuthorizationService (Unified Quality Gate Suite)', () => {
     // 1. REST endpoint call with expired MSL reel
     const res = await fetch(`${baseUrl}/api/v1/smt/splice-verify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${operatorToken}`
+      },
       body: JSON.stringify({
         workCenterId: 'wc-nxt-01',
         slotNo: 1,

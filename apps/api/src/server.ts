@@ -26,6 +26,9 @@ import { MachineControlModule } from './modules/machine-control';
 import { RepeatDefectSentinelService } from './services/repeat-defect-sentinel.service';
 import { securityHeadersMiddleware, SimpleRateLimiter } from './security/http-security';
 import { SecretsConfigManager } from './config/secrets';
+import { authRouter } from './routes/auth.router';
+import { authenticateToken, requirePermission } from './middleware/auth.middleware';
+import { Permission } from './security/permissions';
 
 dotenv.config();
 
@@ -53,7 +56,36 @@ app.use((req, res, next) => {
   next();
 });
 
+// Public Allowlist for Unauthenticated Endpoints
+const PUBLIC_ALLOWLIST = [
+  '/health',
+  '/api/health',
+  '/api/v1/auth/login',
+  '/api/v1/auth/refresh',
+  '/api/v1/openapi.json',
+  '/api-docs',
+  '/metrics'
+] as const;
+
+function isAllowlisted(urlPath: string): boolean {
+  const clean = urlPath.split('?')[0].replace(/\/+$/, '') || '/';
+  return PUBLIC_ALLOWLIST.some((p) => {
+    const cleanP = p.replace(/\/+$/, '') || '/';
+    return clean === cleanP;
+  });
+}
+
+// Global Authentication Guard for /api/v1/* routes
+app.use('/api/v1', (req, res, next) => {
+  const fullPath = (req.baseUrl + req.path).replace(/\/+$/, '') || '/';
+  if (isAllowlisted(fullPath)) {
+    return next();
+  }
+  return authenticateToken(req, res, next);
+});
+
 // Register API routes
+app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/events', eventsRouter);
 app.use('/api/v1/work-centers', workCentersRouter);
 app.use('/api/v1/batches', batchesRouter);
@@ -103,16 +135,16 @@ app.get('/api-docs', (_req, res) => {
 </html>`);
 });
 
-// Sanitized Security Posture & Secrets Audit Endpoint
-app.get('/api/v1/security/audit', (_req, res) => {
+// Sanitized Security Posture & Secrets Audit Endpoint (Protected by SECURITY_ADMIN capability)
+app.get('/api/v1/security/audit', requirePermission(Permission.SECURITY_ADMIN), (_req, res) => {
   res.json({
     success: true,
     data: SecretsConfigManager.getSanitizedReport()
   });
 });
 
-// Health check
-app.get('/health', (_req, res) => {
+// Health check (public allowlist)
+app.get(['/health', '/api/health'], (_req, res) => {
   res.json({
     status: 'HEALTHY',
     system: 'Antigravity SMT MES Engine',
@@ -227,4 +259,4 @@ if (require.main === module) {
   bootstrap();
 }
 
-export { app, fujiAdapter, bootstrap };
+export { app, fujiAdapter, bootstrap, isAllowlisted, PUBLIC_ALLOWLIST };

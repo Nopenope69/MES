@@ -7,14 +7,26 @@ import { app } from '../src/server';
 import { ComplianceLedgerService } from '../src/services/compliance-ledger.service';
 import { EdhrService } from '../src/services/edhr.service';
 import { TraceabilityInterrogationService } from '../src/services/traceability-interrogation.service';
+import { TokenManager } from '../src/security/jwt';
 
 describe('Track B: Compliance & Industrial Audit Readiness Suite (21 CFR Part 11 / FDA 820.180 / ISO 13485)', () => {
   let server: http.Server;
   let baseUrl: string;
+  let qaToken: string;
 
   beforeAll(async () => {
     await initDatabase();
     await seedDatabase();
+
+    qaToken = TokenManager.generateAccessToken({
+      sub: 'qa-smt-01',
+      code: 'QA-SMT-01',
+      name: 'Meera Rao',
+      role: 'QUALITY_INSPECTOR',
+      org: 'org-dixon',
+      site: 'site-noida-p4',
+      authzVersion: 1
+    });
 
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -183,15 +195,17 @@ describe('Track B: Compliance & Industrial Audit Readiness Suite (21 CFR Part 11
   });
 
   it('exposes compliance endpoints over HTTP REST API', async () => {
+    const authHeaders = { Authorization: `Bearer ${qaToken}` };
+
     // 1. GET /api/v1/compliance/ledger/verify
-    const verifyRes = await fetch(`${baseUrl}/api/v1/compliance/ledger/verify`);
+    const verifyRes = await fetch(`${baseUrl}/api/v1/compliance/ledger/verify`, { headers: authHeaders });
     expect(verifyRes.status).toBe(200);
     const verifyData = await verifyRes.json();
     expect(verifyData.success).toBe(true);
     expect(verifyData.data.valid).toBe(true);
 
     // 2. GET /api/v1/compliance/dhr/:dhrNumber
-    const dhrRes = await fetch(`${baseUrl}/api/v1/compliance/dhr/DHR-JOB-SM-260901`);
+    const dhrRes = await fetch(`${baseUrl}/api/v1/compliance/dhr/DHR-JOB-SM-260901`, { headers: authHeaders });
     expect(dhrRes.status).toBe(200);
     const dhrData = await dhrRes.json();
     expect(dhrData.success).toBe(true);
@@ -199,14 +213,14 @@ describe('Track B: Compliance & Industrial Audit Readiness Suite (21 CFR Part 11
     expect(dhrData.data.integrityVerified).toBe(true);
 
     // 3. GET /api/v1/compliance/traceability/backward/:identifier
-    const recallRes = await fetch(`${baseUrl}/api/v1/compliance/traceability/backward/C0402-100NF-16V`);
+    const recallRes = await fetch(`${baseUrl}/api/v1/compliance/traceability/backward/C0402-100NF-16V`, { headers: authHeaders });
     expect(recallRes.status).toBe(200);
     const recallData = await recallRes.json();
     expect(recallData.success).toBe(true);
     expect(recallData.data.containmentMetrics.totalBatchesAffected).toBeGreaterThanOrEqual(1);
 
     // 4. GET /api/v1/compliance/traceability/forward/:identifier
-    const fwdRes = await fetch(`${baseUrl}/api/v1/compliance/traceability/forward/JOB-SM-260901`);
+    const fwdRes = await fetch(`${baseUrl}/api/v1/compliance/traceability/forward/JOB-SM-260901`, { headers: authHeaders });
     expect(fwdRes.status).toBe(200);
     const fwdData = await fwdRes.json();
     expect(fwdData.success).toBe(true);

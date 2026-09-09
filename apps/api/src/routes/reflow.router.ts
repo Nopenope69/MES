@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ReflowProfilingModule } from '../modules/reflow-profiling/reflow-profiling.module';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const reflowRouter = Router();
 const reflowModule = ReflowProfilingModule.getInstance();
@@ -128,33 +130,38 @@ reflowRouter.get('/profiles/:id', async (req: Request, res: Response) => {
  * POST /api/v1/reflow/profiles/:id/approve
  * QA sign-off (21 CFR Part 11 electronic signature).
  */
-reflowRouter.post('/profiles/:id/approve', async (req: Request, res: Response) => {
-  try {
-    const id = String(req.params.id);
-    const { approvedBy, electronicSignature, comments } = req.body;
+reflowRouter.post(
+  '/profiles/:id/approve',
+  requirePermission(Permission.QUALITY_APPROVE),
+  async (req: Request, res: Response) => {
+    try {
+      const id = String(req.params.id);
+      const { approvedBy, electronicSignature, comments } = req.body;
 
-    if (!approvedBy) {
-      return res.status(400).json({ success: false, error: 'approvedBy is required' });
+      const effectiveApprover = approvedBy || req.user?.code || 'QA-INSPECTOR';
+
+      const run = await reflowModule.approveProfileRun({
+        runId: id,
+        approvedBy: effectiveApprover,
+        electronicSignature,
+        comments
+      });
+
+      res.json({ success: true, data: run });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
     }
-
-    const run = await reflowModule.approveProfileRun({
-      runId: id,
-      approvedBy,
-      electronicSignature,
-      comments
-    });
-
-    res.json({ success: true, data: run });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
   }
-});
+);
 
 /**
  * POST /api/v1/reflow/profiles/:id/reject
  * QA rejection of profile run.
  */
-reflowRouter.post('/profiles/:id/reject', async (req: Request, res: Response) => {
+reflowRouter.post(
+  '/profiles/:id/reject',
+  requirePermission(Permission.QUALITY_APPROVE),
+  async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const { rejectedBy, reason } = req.body;
@@ -310,11 +317,15 @@ reflowRouter.get('/specifications/:recipeId', async (req: Request, res: Response
  * POST /api/v1/reflow/specifications
  * Registers a new versioned thermal specification.
  */
-reflowRouter.post('/specifications', async (req: Request, res: Response) => {
-  try {
-    const spec = await reflowModule.registerThermalSpecification(req.body);
-    res.status(201).json({ success: true, data: spec });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
+reflowRouter.post(
+  '/specifications',
+  requirePermission(Permission.RECIPE_MANAGE),
+  async (req: Request, res: Response) => {
+    try {
+      const spec = await reflowModule.registerThermalSpecification(req.body);
+      res.status(201).json({ success: true, data: spec });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
   }
-});
+);

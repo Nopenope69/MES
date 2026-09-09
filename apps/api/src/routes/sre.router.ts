@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { MetricsService } from '../services/metrics.service';
 import { SloMonitorService } from '../services/slo-monitor.service';
 import { ChaosInjectionService, ChaosExperimentPlan } from '../services/chaos-injection.service';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const sreRouter = Router();
 
@@ -28,7 +30,10 @@ sreRouter.get('/slos', async (_req: Request, res: Response) => {
  * POST /api/v1/sre/chaos/run
  * Executes a controlled industrial chaos experiment with strict safety abort criteria.
  */
-sreRouter.post('/chaos/run', async (req: Request, res: Response) => {
+sreRouter.post(
+  '/chaos/run',
+  requirePermission(Permission.SYSTEM_MANAGE),
+  async (req: Request, res: Response) => {
   try {
     const plan: ChaosExperimentPlan = req.body;
     if (!plan.experimentId || !plan.target || !plan.attackType) {

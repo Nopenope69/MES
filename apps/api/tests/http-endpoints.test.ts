@@ -2,15 +2,37 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { app } from '../src/server';
 import { initDatabase } from '../src/db/database';
 import { seedDatabase } from '../src/db/seed';
+import { TokenManager } from '../src/security/jwt';
 import http from 'http';
 
 describe('End-to-End HTTP API Endpoints Test Suite', () => {
   let server: http.Server;
   let baseUrl: string;
+  let authToken: string;
+
+  const authFetch = (url: string, options: any = {}) => {
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${authToken}`
+      }
+    });
+  };
 
   beforeAll(async () => {
     await initDatabase();
     await seedDatabase();
+
+    authToken = TokenManager.generateAccessToken({
+      sub: 'sup-smt-01',
+      code: 'SUP-SMT-01',
+      name: 'Deepak Sharma',
+      role: 'SMT_SUPERVISOR',
+      org: 'org-dixon',
+      site: 'site-noida-p4',
+      authzVersion: 1
+    });
 
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -38,7 +60,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('GET /api/v1/work-centers returns SMT line work centers', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/work-centers`);
+    const res = await authFetch(`${baseUrl}/api/v1/work-centers`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
@@ -47,7 +69,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('GET /api/v1/work-centers/:id/timeline returns equipment state history', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/work-centers/wc-nxt-01/timeline`);
+    const res = await authFetch(`${baseUrl}/api/v1/work-centers/wc-nxt-01/timeline`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
@@ -55,7 +77,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('GET /api/v1/batches returns active SMT jobs', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/batches`);
+    const res = await authFetch(`${baseUrl}/api/v1/batches`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
@@ -63,7 +85,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('GET /api/v1/batches/:id returns single batch details', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/batches/job-01`);
+    const res = await authFetch(`${baseUrl}/api/v1/batches/job-01`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.id).toBe('job-01');
@@ -71,14 +93,14 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('GET /api/v1/events returns canonical event stream', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/events?limit=5`);
+    const res = await authFetch(`${baseUrl}/api/v1/events?limit=5`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
   });
 
   it('GET /api/v1/reports/shift-summary returns OEE metrics', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/reports/shift-summary?workCenterId=wc-nxt-01`);
+    const res = await authFetch(`${baseUrl}/api/v1/reports/shift-summary?workCenterId=wc-nxt-01`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.shiftCode).toBeDefined();
@@ -87,7 +109,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('GET /api/v1/smt/feeders returns physical cassette rack mappings', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/smt/feeders?workCenterId=wc-nxt-01`);
+    const res = await authFetch(`${baseUrl}/api/v1/smt/feeders?workCenterId=wc-nxt-01`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
@@ -97,7 +119,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('POST /api/v1/smt/splice-verify approves matching reel barcode', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/smt/splice-verify`, {
+    const res = await authFetch(`${baseUrl}/api/v1/smt/splice-verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -116,7 +138,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('POST /api/v1/smt/splice-verify blocks mismatched reel barcode (Interlock Trip)', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/smt/splice-verify`, {
+    const res = await authFetch(`${baseUrl}/api/v1/smt/splice-verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -135,7 +157,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('GET /api/v1/smt/pick-errors returns feeder pickup error Pareto', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/smt/pick-errors?workCenterId=wc-nxt-01`);
+    const res = await authFetch(`${baseUrl}/api/v1/smt/pick-errors?workCenterId=wc-nxt-01`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
@@ -144,7 +166,7 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
   });
 
   it('GET /api/v1/genealogy/lot/:lotNumber returns traceability tree', async () => {
-    const res = await fetch(`${baseUrl}/api/v1/genealogy/lot/LOT-MUR-202608`);
+    const res = await authFetch(`${baseUrl}/api/v1/genealogy/lot/LOT-MUR-202608`);
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.rootNodeId).toBeDefined();
