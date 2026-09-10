@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "_comment": "MES Dependency Audit Exception Register. Each exception MUST have advisory/CVE, rationale, owner, mitigation, and expiry. Expired or unapproved entries fail CI.",
+  "exceptions": []
+}

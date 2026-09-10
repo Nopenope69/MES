@@ -15,7 +15,8 @@
     "test": "npm test --workspaces --if-present",
     "seed": "npm --workspace=@mes/api run seed",
     "simulate:fuji": "tsx apps/api/src/adapters/fuji-simulator.ts",
-    "package:exe": "node scripts/build-standalone.mjs"
+    "package:exe": "node scripts/build-standalone.mjs",
+    "doctor": "tsx scripts/mes-doctor.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.3"
