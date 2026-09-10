@@ -51,11 +51,29 @@ export class SmtProjector implements IEventProjector {
         const payload = event.payload;
         const effectiveBatchId = event.batchId || 'ACTIVE-JOB';
 
+        let profileRunId = payload.profileRunId || null;
+        if (!profileRunId) {
+          try {
+            const activeProfiles = await tx.query<any>(`
+              SELECT id FROM reflow_profile_runs
+              WHERE (line_id = ? OR equipment_id = ?)
+                AND recipe_id = ?
+                AND status = 'ACTIVE'
+                AND compliance_result = 'PASS'
+              ORDER BY activated_at DESC
+              LIMIT 1
+            `, [event.lineId || 'line-01', event.workCenterId, payload.programName]);
+            if (activeProfiles.length > 0) {
+              profileRunId = activeProfiles[0].id;
+            }
+          } catch {}
+        }
+
         await tx.execute(`
           INSERT INTO panel_checkouts (
             id, panel_barcode, work_center_id, batch_id, program_name,
-            cycle_time_seconds, block_count, block_skip_count, skip_bitmask, completed_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            cycle_time_seconds, block_count, block_skip_count, skip_bitmask, completed_at, profile_run_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           uuidv4(),
           payload.panelBarcode,
@@ -66,7 +84,8 @@ export class SmtProjector implements IEventProjector {
           payload.blockCount,
           payload.blockSkipCount,
           payload.skipBitmask ?? null,
-          eventTime
+          eventTime,
+          profileRunId
         ]);
 
         if (event.batchId) {

@@ -5,10 +5,10 @@ import { MesDoctor, DiagnosticResult } from '../../../scripts/mes-doctor';
 describe('MES Doctor Diagnostic Suite (Task 9)', () => {
   let result: DiagnosticResult;
 
-  it('executes 12 diagnostic modules and verifies deployment readiness', async () => {
+  it('executes 13 diagnostic modules and verifies deployment readiness', async () => {
     result = await MesDoctor.runDiagnostics();
 
-    expect(result.modules.length).toBe(12);
+    expect(result.modules.length).toBe(13);
     expect(result.version).toBe('1.0.0');
     expect(result.timestamp).toBeDefined();
 
@@ -26,6 +26,7 @@ describe('MES Doctor Diagnostic Suite (Task 9)', () => {
     expect(moduleNames).toContain('audit-exceptions');
     expect(moduleNames).toContain('container-config');
     expect(moduleNames).toContain('release-attestation');
+    expect(moduleNames).toContain('traceability-module');
 
     // Every module should have timing
     for (const mod of result.modules) {

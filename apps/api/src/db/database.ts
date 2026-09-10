@@ -331,6 +331,11 @@ export async function initDatabase(): Promise<void> {
     await db.execute("CREATE INDEX IF NOT EXISTS idx_dr_drill_status ON dr_drill_history(status, drill_completed_at);");
   } catch {}
 
+  // Traceability & Reflow Linkage (Phase 10)
+  try {
+    await db.execute("ALTER TABLE panel_checkouts ADD COLUMN profile_run_id VARCHAR(64);");
+  } catch {}
+
   console.log('[DB] Schema verified and initialized.');
 }
 

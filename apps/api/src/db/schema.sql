@@ -323,7 +323,8 @@ CREATE TABLE IF NOT EXISTS panel_checkouts (
   block_count INTEGER DEFAULT 1,
   block_skip_count INTEGER DEFAULT 0,
   skip_bitmask VARCHAR(64),
-  completed_at TIMESTAMP NOT NULL
+  completed_at TIMESTAMP NOT NULL,
+  profile_run_id VARCHAR(64)
 );
 
 -- Feeder Error Logs (From PDERROR / FEEDERUSAGE / NOZZLECOUNT)

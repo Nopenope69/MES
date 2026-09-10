@@ -197,6 +197,18 @@ export async function seedDatabase(): Promise<void> {
       ('stc-sm-01', 'STC-SM-4G-TOP', 'PRD-SM-4G-V2', 'A', 'STN-2026-0042', 'IN_USE')
   `);
 
+  await db.execute(`
+    INSERT INTO stencil_sessions (id, stencil_id, work_center_id, batch_id, started_at, ended_at, status)
+    VALUES
+      ('sess-01', 'STC-SM-4G-TOP', 'wc-spg-01', 'job-01', '2026-09-01T06:00:00.000Z', NULL, 'ACTIVE')
+  `);
+
+  await db.execute(`
+    INSERT INTO stencil_paste_loads (id, stencil_session_id, paste_jar_id, loaded_at, removed_at, status)
+    VALUES
+      ('spl-01', 'sess-01', 'JAR-ALPHA-2601-C', '2026-09-01T06:00:00.000Z', NULL, 'ACTIVE')
+  `);
+
   console.log('[SEED] Inserting Component Reels in Warehouse & Feeder Bank...');
   await db.execute(`
     INSERT INTO component_reels (
@@ -260,12 +272,13 @@ export async function seedDatabase(): Promise<void> {
 
   // Seed sample panel checkouts
   await db.execute(`
-    INSERT INTO panel_checkouts (id, panel_barcode, work_center_id, batch_id, program_name, cycle_time_seconds, block_count, block_skip_count, completed_at)
+    INSERT INTO panel_checkouts (id, panel_barcode, work_center_id, batch_id, program_name, cycle_time_seconds, block_count, block_skip_count, completed_at, profile_run_id)
     VALUES 
-      ('panel-chk-01', 'PNL-SM-00140', 'wc-nxt-01', 'job-01', 'PROG-SM-METER-TOP-REV4', 18.24, 4, 0, ?),
-      ('panel-chk-02', 'PNL-SM-00141', 'wc-nxt-01', 'job-01', 'PROG-SM-METER-TOP-REV4', 18.50, 4, 0, ?),
-      ('panel-chk-03', 'PNL-SM-00142', 'wc-nxt-01', 'job-01', 'PROG-SM-METER-TOP-REV4', 19.12, 3, 1, ?)
-  `, [now, now, now]);
+      ('panel-chk-01', 'PNL-SM-00140', 'wc-nxt-01', 'job-01', 'PROG-SM-METER-TOP-REV4', 18.24, 4, 0, ?, 'run-prf-20260908-01'),
+      ('panel-chk-02', 'PNL-SM-00141', 'wc-nxt-01', 'job-01', 'PROG-SM-METER-TOP-REV4', 18.50, 4, 0, ?, 'run-prf-20260908-01'),
+      ('panel-chk-03', 'PNL-SM-00142', 'wc-nxt-01', 'job-01', 'PROG-SM-METER-TOP-REV4', 19.12, 3, 1, ?, 'run-prf-20260908-01'),
+      ('panel-chk-demo-01', 'PNL-260901-0042', 'wc-nxt-01', 'job-01', 'PROG-SM-METER-TOP-REV4', 18.20, 6, 0, ?, 'run-prf-20260908-01')
+  `, [now, now, now, now]);
 
   // Seed SMT feeder error logs
   await db.execute(`

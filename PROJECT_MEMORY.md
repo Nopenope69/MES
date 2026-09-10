@@ -1,17 +1,17 @@
 # Antigravity SMT MES Engine: Executive Project Memory & Master State Briefing
 
-**Document Version**: 8.0.0 (Customer-Readiness Security Hardening & DevSecOps Release)  
+**Document Version**: 9.0.0 (Phase 10 — Unit-Level Traceability, As-Built Genealogy & Set-Based Recall Engine)  
 **Last Updated**: September 10, 2026  
 **Repository**: [https://github.com/Nopenope69/MES](https://github.com/Nopenope69/MES) (`main` branch)  
 **Target Sector**: High-Speed Electronics Manufacturing Services (EMS) / Surface Mount Technology (SMT)  
 **Primary Benchmarks**: Dixon Technologies, Syrma SGS, Kaynes Technology, Sahasra Electronic Solutions  
-**Monorepo Health**: Clean TypeScript build (`code 0`) across all workspaces; **261/261 tests passing (100% green across 33 test files)**. MES Doctor: **12/12 diagnostic modules PASS**. Security audit score: **9.3/10** (up from 4.3/10 baseline).
+**Monorepo Health**: Clean TypeScript build (`code 0`) across all workspaces; **277/277 tests passing (100% green across 34 test files)**. MES Doctor: **13/13 diagnostic modules PASS**. Security audit score: **9.3/10**.
 
 ---
 
 ## 1. Executive Summary & Milestone Chronology
 
-The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufacturing Execution System engineered specifically for tier-1 high-speed SMT assembly lines. It has evolved through six major functional phases, a comprehensive diagnostic hardening sweep, a foundational architectural deepening refactor, and a full customer-readiness security hardening program.
+The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufacturing Execution System engineered specifically for tier-1 high-speed SMT assembly lines. It has evolved through six major functional phases, a comprehensive diagnostic hardening sweep, a foundational architectural deepening refactor, a full customer-readiness security hardening program, and now Phase 10: a high-throughput unit-level traceability, as-built genealogy, and set-based containment recall engine.
 
 ### Phase Milestones Summary:
 1. **Phase 1 — Operational Telemetry & Event Ingress**:
@@ -86,6 +86,15 @@ The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufactur
    - **Task 9 — DevSecOps CI Pipeline & MES Doctor** (`97bcecc`): Blocking `npm audit` evaluated against `.audit-exceptions.json` (each exception requires advisory/CVE, package, rationale, owner, mitigation, expiresAt). Gitleaks secret scanning. SAST via `eslint-plugin-security`. MES Doctor CLI with 12 diagnostic modules (tri-state PASS/FAIL/NOT_VERIFIED; NOT_VERIFIED treated as FAIL). Deterministic release gate: $\text{BLOCKERS} = 0 \land \text{CRITICAL} = 0 \land \text{DOCTOR} = \text{PASS} \land \text{DR} = \text{VERIFIED} \land \text{TESTS} = \text{PASS}$.
    - **Audit Closure** (`f7f9d77`): Security finding closure matrix mapping all 17 audit items (D.1–D.14, E.5, E.8, E.18) to remediation commits, automated tests, and MES Doctor verification modules. Independent re-audit report confirming 9.3/10 post-remediation score.
 
+10. **Phase 10 — Unit-Level Traceability, As-Built Genealogy & Set-Based Containment Recall Engine**:
+    - **Full As-Built Genealogy Chain**: Correlates Unit Serial $\leftrightarrow$ Panel Barcode $\leftrightarrow$ Placement Chain (RefDes, CAD $(x, y, \theta)$, Feeder Slot, Reel ID, Lot Number, Supplier, MSL Class, Remaining Floor Life) $\leftrightarrow$ Solder Paste Lot & Stencil Session $\leftrightarrow$ 3D SPI Pad Volume/Height/Area $\leftrightarrow$ Reflow Thermal Profile & PWI $\leftrightarrow$ 3D AOI Optical Defects & Signatures $\leftrightarrow$ Cleanroom Rework Replacement Chain $\leftrightarrow$ eDHR & Compliance Audit Ledger.
+    - **Panel-Scoped Bulk Retrieval Primitive**: Single $O(\text{domain tables})$ query set per panel with composite in-memory indexing (`cadByUnit: Map<number, Map<string, CadDefinition>>`, `reelTimelineBySlot: Map<string, ReelInterval[]>`, `spiByUnit`, `aoiByUnit`, `reworkEventsByUnit`), assembling $1..N$ units in memory without per-unit roundtrips ($\le 20$ DB queries per panel for 6 units).
+    - **Zero-Loop Set-Based Recall & Batch Summaries**: `recallByIdentifier()` and `getBatchGenealogy()` execute pure set-based SQL joins and aggregations without iterative looping over panel or unit genealogy.
+    - **Direct Reflow Linkage & Temporal Ambiguity Gate**: Added `profile_run_id VARCHAR(64)` to `panel_checkouts` populated by `SmtProjector` on `PANEL_CHECKOUT` with fallback temporal window $[t_{\text{checkout}} - 30\text{m}, t_{\text{checkout}}]$. If multiple active certified profiles overlap without direct FK, marks linkage confidence as `AMBIGUOUS` instead of guessing.
+    - **Historical Interval-Based Reel Attribution**: Evaluates `REEL_LOADED`, `REEL_SPLICED`, and `REEL_UNLOADED` events to attribute the exact reel active during panel placement window $[t_{\text{checkout}} - \text{cycle\_time}, t_{\text{checkout}}]$.
+    - **Cross-Namespace Ambiguity Gate**: If an identifier exists across multiple namespaces (e.g. both a reel ID and a panel barcode), halts immediately with `status: 'AMBIGUOUS_IDENTIFIER'` and candidate namespace matches.
+    - **Strict Domain Types & Non-Breaking API**: Canonical enums and types matching `@mes/shared`. REST API endpoints (`/unit/:panelBarcode/:unitPosition`, `/panel/:panelBarcode`, `/serial/:serialNumber`, `/summary/batch/:batchNumber`, `/recall/:identifier`) protected by `Permission.REPORTS_VIEW`. Backward-compatible `GenealogyService` facade.
+
 ---
 
 ## 2. Domain Glossary & Official System Vocabulary (`CONTEXT.md`)
@@ -101,26 +110,26 @@ All codebase entities strictly adhere to the domain definitions locked in [`CONT
 
 ---
 
-## 3. The 4 Deep Subsystems Architecture
+## 3. The 5 Deep Subsystems Architecture
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                             ANTIGRAVITY SMT MES ENGINE                           │
-└────────┬───────────────────────┬────────────────────────┬──────────────────────┬─┘
-         │                       │                        │                      │
-         ▼                       ▼                        ▼                      ▼
-┌──────────────────┐    ┌──────────────────┐    ┌───────────────────┐   ┌──────────────────┐
-│ EventStoreModule │    │MachineControlMod │    │DefectLifecycleMod │   │ MaterialGateMod  │
-├──────────────────┤    ├──────────────────┤    ├───────────────────┤   ├──────────────────┤
-│• Declarative     │    │• HAL Control Seam│    │• Closed-Loop AOI/ │   │• Single Material │
-│  Event Registry  │    │• Strongly-Typed  │    │  SPI Ingestion    │   │  Gate Authority  │
-│  (41 Schemas)    │    │  Command Unions  │    │• Repeat Defect    │   │• Typed Gate APIs:│
-│• Atomic Append   │    │  (Param & Action)│    │  Sentinel Engine  │   │  - Feeder Splice │
-│• Auto Upcasting  │    │• Capability Guard│    │• JEDEC MSL Floor  │   │  - Screen Printer│
-│• Unified Catchup │    │• State Transition│    │  Life Enforcement │   │  - Rework Reels  │
-│  Checkpoints &   │    │• Replaced Static │    │• Thermal Limit    │   │• 21 CFR Part 11  │
-│  Snapshots       │    │  Callbacks       │    │  CAD Validation   │   │  Audit Logging   │
-└──────────────────┘    └──────────────────┘    └───────────────────┘   └──────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                       ANTIGRAVITY SMT MES ENGINE                                       │
+└────────┬───────────────────────┬────────────────────────┬──────────────────────┬───────────────────────┘
+         │                       │                        │                      │                       │
+         ▼                       ▼                        ▼                      ▼                       ▼
+┌──────────────────┐    ┌──────────────────┐    ┌───────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│ EventStoreModule │    │MachineControlMod │    │DefectLifecycleMod │   │ MaterialGateMod  │   │TraceabilityModule│
+├──────────────────┤    ├──────────────────┤    ├───────────────────┤   ├──────────────────┤   ├──────────────────┤
+│• Declarative     │    │• HAL Control Seam│    │• Closed-Loop AOI/ │   │• Single Material │   │• Unit-Level As-  │
+│  Event Registry  │    │• Strongly-Typed  │    │  SPI Ingestion    │   │  Gate Authority  │   │  Built Genealogy │
+│  (41 Schemas)    │    │  Command Unions  │    │• Repeat Defect    │   │• Typed Gate APIs:│   │• Panel Bulk O(1) │
+│• Atomic Append   │    │  (Param & Action)│    │  Sentinel Engine  │   │  - Feeder Splice │   │  Retrieval Prim. │
+│• Auto Upcasting  │    │• Capability Guard│    │• JEDEC MSL Floor  │   │  - Screen Printer│   │• Zero-Loop Recall│
+│• Unified Catchup │    │• State Transition│    │  Life Enforcement │   │  - Rework Reels  │   │  Containment     │
+│  Checkpoints &   │    │• Replaced Static │    │• Thermal Limit    │   │• 21 CFR Part 11  │   │• Ambiguity Gate  │
+│  Snapshots       │    │  Callbacks       │    │  CAD Validation   │   │  Audit Logging   │   │• Profile FK Link │
+└──────────────────┘    └──────────────────┘    └───────────────────┘   └──────────────────┘   └──────────────────┘
 ```
 
 ### 1. `EventStoreModule` (`apps/api/src/modules/event-store/`)
@@ -173,6 +182,21 @@ All codebase entities strictly adhere to the domain definitions locked in [`CONT
   - `authorizeReworkReel(params: ReworkReelAuthParams): Promise<ReworkReelAuthDecision>`
 - **Compliance**: Appends immutable `QUALITY_GATE_PASSED` and `QUALITY_GATE_BLOCKED` events into `EventStoreModule` with operator ID, reason, and work center ID.
 
+### 5. `TraceabilityModule` (`apps/api/src/modules/traceability/`)
+- **Seam**: [`ITraceabilityModule`](file:///Users/tecbusiness/Documents/antigravity/quirky-pythagoras/apps/api/src/modules/traceability/traceability.interface.ts)
+- **Implementation**: [`TraceabilityModule`](file:///Users/tecbusiness/Documents/antigravity/quirky-pythagoras/apps/api/src/modules/traceability/traceability.module.ts)
+- **Key Methods**:
+  - `getUnitGenealogy(panelBarcode: string, unitPosition: number): Promise<UnitGenealogyReport>`
+  - `getPanelGenealogy(panelBarcode: string): Promise<PanelGenealogyReport>`
+  - `getBatchGenealogy(batchNumberOrId: string): Promise<BatchGenealogyReport>`
+  - `recallByIdentifier(identifier: string): Promise<RecallContainmentReport>`
+  - `lookupBySerialNumber(serialNumber: string): Promise<UnitGenealogyReport | null>`
+- **Core Design Invariants**:
+  - **Panel Bulk Retrieval**: `buildPanelAssemblyContext` executes $O(\text{tables})$ bulk queries per panel ($\le 20$ queries for 6 units) with in-memory composite maps.
+  - **Zero-Loop Recall**: Forward and backward trace containment via pure set-based SQL queries, never looping over panels or units.
+  - **Ambiguity Gating**: Cross-namespace resolution detects collisions across reel, paste lot, stencil serial, panel barcode, or unit serial, halting with `AMBIGUOUS_IDENTIFIER`. Multiple active reflow runs overlapping a checkout without direct FK yield `AMBIGUOUS` confidence.
+  - **Historical Reel Intervals**: Attributes component reel by matching panel placement window $[t_{\text{checkout}} - \text{cycle\_time}, t_{\text{checkout}}]$ against `REEL_LOADED`, `REEL_SPLICED`, and `REEL_UNLOADED` event timestamps.
+
 ---
 
 ## 4. Master Database Schema Reference (`schema.sql`)
@@ -194,6 +218,7 @@ All codebase entities strictly adhere to the domain definitions locked in [`CONT
 * `stencil_sessions`: Active printing sessions (`id`, `stencil_id`, `work_center_id`, `batch_id`, `started_at`, `ended_at`, `status`, `life_expires_at`).
 * `stencil_paste_loads`: Paste load history (`id`, `stencil_session_id`, `paste_jar_id`, `loaded_at`, `removed_at`, `status`).
 * `smt_feeder_slots`: Fuji NXT feeder bank setup (`id`, `work_center_id`, `module_no`, `stage_no`, `slot_no`, `feeder_id`, `feeder_type`, `assigned_part_number`, `current_reel_id`, `status`).
+* `panel_checkouts`: Fuji NXT and SMT line checkout records (`id`, `panel_barcode`, `work_center_id`, `batch_id`, `program_name`, `cycle_time_seconds`, `block_count`, `block_skip_count`, `completed_at`, `profile_run_id`).
 * `feeder_error_logs`: Hardware pickup error telemetry (`id`, `work_center_id`, `module_no`, `slot_no`, `nozzle_id`, `error_type`, `occurred_at`).
 
 ### Quality, Inspection & Rework Models:
@@ -211,16 +236,17 @@ All codebase entities strictly adhere to the domain definitions locked in [`CONT
 
 ---
 
-## 5. Master Test Suite Matrix (33 Files, 261 Tests, 100% Green)
+## 5. Master Test Suite Matrix (34 Files, 277 Tests, 100% Green)
 
 ```text
-Test Files  33 passed (33)
-     Tests  261 passed (261)
-  Duration  ~23s
+Test Files  34 passed (34)
+     Tests  277 passed (277)
+  Duration  ~22s
 ```
 
 | Suite Name | Scope | Tests |
 |---|---|---|
+| **`tests/traceability-genealogy.test.ts`** | **Unit-level as-built genealogy, O(tables) panel bulk retrieval, zero-loop recall, profile FK linkage, reel splice intervals, namespace ambiguity** | **16** |
 | `tests/fleet-predictive-phase-5.test.ts` | Multi-line OEE, AGV transport lifecycle, dock authorization, concurrency lock, depletion, isolated telemetry, contextual SPC, regression slope, safety gate | 12 |
 | `tests/modules/event-store.module.test.ts` | Schema registry, atomic transactional append, upcasting, unified checkpoints | 3 |
 | `tests/modules/machine-control.module.test.ts` | HAL seam, parameter & action command unions, capability discovery, audit events | 7 |
@@ -253,7 +279,7 @@ Test Files  33 passed (33)
 | **`tests/perimeter-egress.test.ts`** | **SSRF blocking, egress IP policy, DNS pinning, bootstrap state machine** | **7** |
 | **`tests/ot-fuji-security.test.ts`** | **64KB frame overflow guard, sync header validation, 30s idle timeout, DoS** | **6** |
 | **`tests/disaster-recovery.test.ts`** | **DR verification, manifest integrity, RPO/RTO SLA, drill freshness** | **5** |
-| **`tests/mes-doctor.test.ts`** | **12-module diagnostics, tri-state readiness, release attestation** | **5** |
+| **`tests/mes-doctor.test.ts`** | **13-module diagnostics, tri-state readiness, release attestation** | **5** |
 
 ---
 
@@ -279,7 +305,8 @@ quirky-pythagoras/
     │   │   │   ├── machine-control/           # Hardware Abstraction Layer & typed commands
     │   │   │   ├── defect-lifecycle/          # AOI/SPI ingestion, sentinel, rework, correlation
     │   │   │   ├── material-gate/             # Single compliance authority & 21 CFR Part 11 audit
-    │   │   │   └── reflow-profiling/          # Phase 6 ReflowProfilingModule facade, adapters, PWI, drift
+    │   │   │   ├── reflow-profiling/          # ReflowProfilingModule facade, adapters, PWI, drift
+    │   │   │   └── traceability/              # TraceabilityModule: unit-level as-built & recall engine
     │   │   ├── adapters/                      # Equipment gateways (Fuji Nexim TCP, IPC-CFX AMQP)
     │   │   ├── services/                      # Domain services & specialized engines:
     │   │   │   ├── production-metrics.service.ts # Canonical SEMI E10 OEE & Takt adherence
@@ -287,8 +314,10 @@ quirky-pythagoras/
     │   │   │   ├── material-reservation.service.ts# Atomic DB cross-line mutual exclusion
     │   │   │   ├── agv-mission-manager.service.ts# Decoupled AGV transport & dock authorization
     │   │   │   ├── telemetry-store.service.ts    # Isolated time-series sensor store
-    │   │   │   └── predictive-quality.service.ts # Contextual SPC, linear slope & safety gate
+    │   │   │   ├── predictive-quality.service.ts # Contextual SPC, linear slope & safety gate
+    │   │   │   └── genealogy.service.ts          # Backward-compatible facade to TraceabilityModule
     │   │   ├── routes/                        # Express HTTP endpoints:
+    │   │   │   ├── genealogy.router.ts        # /api/v1/genealogy/* (unit, panel, serial, batch, recall)
     │   │   │   ├── reflow.router.ts           # /api/v1/reflow/*
     │   │   │   ├── fleet.router.ts            # /api/v1/fleet/*
     │   │   │   ├── logistics.router.ts        # /api/v1/logistics/*
@@ -296,7 +325,7 @@ quirky-pythagoras/
     │   │   │   └── smt.router.ts, auth.router.ts, etc.
     │   │   ├── db/                            # Database connection, migrations, seed, schema.sql:
     │   │   │   ├── migrations/005_phase6_reflow_profiling.sql
-    │   │   │   └── seed.ts (Line 01 & Line 02, AGV-01/02, Phase 6 thermal fixtures)
+    │   │   │   └── seed.ts (Line 01 & Line 02, AGV-01/02, Phase 6 thermal fixtures, stencil sessions)
     │   │   ├── security/                      # Security Infrastructure (Phase 9):
     │   │   │   ├── context.ts                 # SecurityPrincipal, ServiceScope, RequestContext
     │   │   │   ├── jwt.ts                     # TokenManager: 15-min access JWT, strict iss/aud
@@ -310,7 +339,7 @@ quirky-pythagoras/
     │   │   ├── middleware/                     # Express middleware:
     │   │   │   └── auth.middleware.ts          # authenticateToken, requirePermission, requireRoles
     │   │   └── server.ts                      # Express app, TCP gateway, global auth middleware
-    │   └── tests/                             # Vitest automated test suites (33 files / 261 tests)
+    │   └── tests/                             # Vitest automated test suites (34 files / 277 tests)
     └── web/                                   # React / TypeScript / Tailwind Cleanroom Cockpit
         └── src/
             ├── components/                    # Industrial station UIs:
@@ -322,7 +351,7 @@ quirky-pythagoras/
             │   └── AndonTower.tsx
             └── App.tsx                        # Master tactile cockpit navigation (10 tabs)
 ├── scripts/
-│   ├── mes-doctor.ts                          # MES Doctor 12-module pre-deployment diagnostics CLI
+│   ├── mes-doctor.ts                          # MES Doctor 13-module pre-deployment diagnostics CLI
 │   ├── migrate-pins.ts                        # Idempotent plaintext→hash PIN migration
 │   ├── backup.sh                              # SHA-256 manifest backup package generator
 │   ├── restore.sh                             # Cryptographic restore & verification

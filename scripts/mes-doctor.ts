@@ -402,6 +402,42 @@ async function checkReleaseAttestation(): Promise<DiagnosticModule> {
   }
 }
 
+async function checkTraceabilityModule(): Promise<DiagnosticModule> {
+  const start = Date.now();
+  try {
+    const modulePath = path.resolve(__dirname, '../apps/api/src/modules/traceability/traceability.module.ts');
+    const interfacePath = path.resolve(__dirname, '../apps/api/src/modules/traceability/traceability.interface.ts');
+
+    if (!fs.existsSync(modulePath) || !fs.existsSync(interfacePath)) {
+      return { name: 'traceability-module', status: 'FAIL', detail: 'Traceability module files missing', durationMs: Date.now() - start };
+    }
+
+    const moduleContent = fs.readFileSync(modulePath, 'utf-8');
+    const requiredOps = [
+      'getUnitGenealogy',
+      'getPanelGenealogy',
+      'getBatchGenealogy',
+      'recallByIdentifier',
+      'lookupBySerialNumber'
+    ];
+
+    const missingOps = requiredOps.filter(op => !moduleContent.includes(op));
+    if (missingOps.length > 0) {
+      return { name: 'traceability-module', status: 'FAIL', detail: `Missing public operations: ${missingOps.join(', ')}`, durationMs: Date.now() - start };
+    }
+
+    const schemaPath = path.resolve(__dirname, '../apps/api/src/db/schema.sql');
+    const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
+    if (!schemaContent.includes('profile_run_id')) {
+      return { name: 'traceability-module', status: 'FAIL', detail: 'profile_run_id column missing from schema.sql', durationMs: Date.now() - start };
+    }
+
+    return { name: 'traceability-module', status: 'PASS', detail: `All ${requiredOps.length} public operations exported and profile_run_id verified`, durationMs: Date.now() - start };
+  } catch (e: any) {
+    return { name: 'traceability-module', status: 'NOT_VERIFIED', detail: e.message, durationMs: Date.now() - start };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // MesDoctor main orchestrator
 // ---------------------------------------------------------------------------
@@ -410,14 +446,14 @@ export class MesDoctor {
   public static readonly VERSION = '1.0.0';
 
   /**
-   * Execute all 12 diagnostic modules and produce a deployment readiness report.
+   * Execute all 13 diagnostic modules and produce a deployment readiness report.
    * Any module returning NOT_VERIFIED is treated as FAIL for deployment readiness.
    */
   public static async runDiagnostics(): Promise<DiagnosticResult> {
     const startTime = Date.now();
     const modules: DiagnosticModule[] = [];
 
-    // Execute all 12 diagnostic modules
+    // Execute all 13 diagnostic modules
     const checks = [
       checkDatabaseSchema,
       checkAuthStack,
@@ -430,7 +466,8 @@ export class MesDoctor {
       checkDisasterRecovery,
       checkAuditExceptions,
       checkDockerCompose,
-      checkReleaseAttestation
+      checkReleaseAttestation,
+      checkTraceabilityModule
     ];
 
     for (const check of checks) {
