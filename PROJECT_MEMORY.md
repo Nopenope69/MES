@@ -1,11 +1,11 @@
 # Antigravity SMT MES Engine: Executive Project Memory & Master State Briefing
 
-**Document Version**: 9.0.0 (Phase 10 — Unit-Level Traceability, As-Built Genealogy & Set-Based Recall Engine)  
-**Last Updated**: September 10, 2026  
+**Document Version**: 9.1.0 (Phase 10 — Unit-Level Traceability Engine & Cleanroom Cockpit Station)  
+**Last Updated**: September 11, 2026  
 **Repository**: [https://github.com/Nopenope69/MES](https://github.com/Nopenope69/MES) (`main` branch)  
 **Target Sector**: High-Speed Electronics Manufacturing Services (EMS) / Surface Mount Technology (SMT)  
 **Primary Benchmarks**: Dixon Technologies, Syrma SGS, Kaynes Technology, Sahasra Electronic Solutions  
-**Monorepo Health**: Clean TypeScript build (`code 0`) across all workspaces; **277/277 tests passing (100% green across 34 test files)**. MES Doctor: **13/13 diagnostic modules PASS**. Security audit score: **9.3/10**.
+**Monorepo Health**: Clean TypeScript build (`code 0`) across all workspaces; **296/296 tests passing (100% green across 35 test files)**. MES Doctor: **13/13 diagnostic modules PASS**. Security audit score: **9.3/10**.
 
 ---
 
@@ -94,6 +94,8 @@ The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufactur
     - **Historical Interval-Based Reel Attribution**: Evaluates `REEL_LOADED`, `REEL_SPLICED`, and `REEL_UNLOADED` events to attribute the exact reel active during panel placement window $[t_{\text{checkout}} - \text{cycle\_time}, t_{\text{checkout}}]$.
     - **Cross-Namespace Ambiguity Gate**: If an identifier exists across multiple namespaces (e.g. both a reel ID and a panel barcode), halts immediately with `status: 'AMBIGUOUS_IDENTIFIER'` and candidate namespace matches.
     - **Strict Domain Types & Non-Breaking API**: Canonical enums and types matching `@mes/shared`. REST API endpoints (`/unit/:panelBarcode/:unitPosition`, `/panel/:panelBarcode`, `/serial/:serialNumber`, `/summary/batch/:batchNumber`, `/recall/:identifier`) protected by `Permission.REPORTS_VIEW`. Backward-compatible `GenealogyService` facade.
+    - **Cleanroom Web Cockpit Integration (`apps/web` Tab 03: `03 // GENEALOGY`)**: Upgraded from prototype to full industrial `TraceabilityStation.tsx`. Includes interactive `PanelUnitMatrix` ($1..N$ multi-up circuits), 7-stage `LifecycleRibbon`, `PlacementChainTable` with JEDEC MSL presentation rules (sentinel `999999m` $\rightarrow$ `—`), 6 domain process cards (`SolderPasteCard`, `SpiInspectionCard`, `ReflowProfileCard`, `AoiInspectionCard`, `ReworkLedger`, `DhrLedgerCard`), `RecallMode` with forward/backward containment scope and read-only recommendation generation, and `BatchMode` with yield rollups and material consumption.
+    - **Strict Web Safety & Governance Invariants**: Explicit `TraceabilityDataSource` state machine (`LIVE`, `OFFLINE_FIXTURE`, `AUTH_ERROR`, `NOT_FOUND`, `ERROR`, `OFFLINE_NO_DATA`). HTTP 401/403/404/500 never fall back to canned fixtures. Offline fixtures allowed only on network outage when fixture mode is active, displaying prominent amber warning banner. 19 dedicated web tests in `apps/web/tests/traceability-station.test.ts` verifying all invariants.
 
 ---
 
