@@ -1,17 +1,17 @@
 # Antigravity SMT MES Engine: Executive Project Memory & Master State Briefing
 
-**Document Version**: 7.0.0 (Closed-Loop Reflow Oven Telemetry & Thermal Profiling Engine Release)  
-**Last Updated**: September 9, 2026  
+**Document Version**: 8.0.0 (Customer-Readiness Security Hardening & DevSecOps Release)  
+**Last Updated**: September 10, 2026  
 **Repository**: [https://github.com/Nopenope69/MES](https://github.com/Nopenope69/MES) (`main` branch)  
 **Target Sector**: High-Speed Electronics Manufacturing Services (EMS) / Surface Mount Technology (SMT)  
 **Primary Benchmarks**: Dixon Technologies, Syrma SGS, Kaynes Technology, Sahasra Electronic Solutions  
-**Monorepo Health**: Clean TypeScript build (`code 0`) across all workspaces; **201/201 tests passing (100% green across 24 test files)**.
+**Monorepo Health**: Clean TypeScript build (`code 0`) across all workspaces; **261/261 tests passing (100% green across 33 test files)**. MES Doctor: **12/12 diagnostic modules PASS**. Security audit score: **9.3/10** (up from 4.3/10 baseline).
 
 ---
 
 ## 1. Executive Summary & Milestone Chronology
 
-The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufacturing Execution System engineered specifically for tier-1 high-speed SMT assembly lines. It has evolved through five major functional phases, a comprehensive diagnostic hardening sweep, and a foundational architectural deepening refactor.
+The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufacturing Execution System engineered specifically for tier-1 high-speed SMT assembly lines. It has evolved through six major functional phases, a comprehensive diagnostic hardening sweep, a foundational architectural deepening refactor, and a full customer-readiness security hardening program.
 
 ### Phase Milestones Summary:
 1. **Phase 1 — Operational Telemetry & Event Ingress**:
@@ -73,6 +73,18 @@ The Antigravity SMT MES platform is an enterprise-grade, event-driven Manufactur
    - **Conservative Process-Risk Gating**: `ThermalImpactService` evaluates process margin $(100 - PWI_{\text{base}})$ and baseline risk, preventing unverified or low-confidence drift corrections from asserting false compliance.
    - **MachineControlModule Interlock Triad**: Exclusive actuation seam for reflow oven safety interlocks, emitting `REFLOW_INTERLOCK_REQUESTED`, `CONFIRMED`, and `FAILED` audit records.
    - **Cleanroom Web Cockpit Station**: `ReflowThermalStation.tsx` mounted as Tab 10 in `apps/web`, featuring multi-channel SVG thermocouple curves with Liquidus (217°C) overlay, PWI gauge dials, 10-zone oven tunnel schematic, and 21 CFR Part 11 electronic signature sign-off modal.
+
+9. **Customer-Readiness Security Hardening & DevSecOps Release** (9 implementation tasks, 17 findings closed, score 4.3→9.3/10):
+   - **Task 1 — Security Context & Classified Scopes** (`e9524f0`): `SecurityPrincipal`, `ServiceScope`, `RequestContext` abstractions. `ScopedRepository` with GLOBAL/ORG/SITE table classification enforcing tenant isolation at the persistence layer.
+   - **Task 2 — Credential Hashing** (`35ec41b`): Replaced plaintext PIN storage with Argon2id (primary) + Bcrypt (fallback). Anti-enumeration constant-time timing on unknown operator codes. Idempotent, resumable `migrate-pins.ts` backfill that does not drop `pin` until every row has a verified `pin_hash`.
+   - **Task 3 — Dual-Token JWT Architecture** (`14071f2`): 15-minute short-lived access JWTs (browser in-memory), 12-hour revocable server-side refresh sessions. SHA-256 hashed 32-byte opaque tokens in `refresh_tokens` table. Family-based anti-theft revocation: token reuse triggers full-family invalidation.
+   - **Task 4 — Capability-Based RBAC** (`e29f3b6`): 25+ granular `Permission` enum values with `ROLE_PERMISSION_MAP`. Non-delegable Separation of Duties enforcement. Global `authenticateToken` middleware with public route allowlist. Dynamic route inventory auth coverage verification.
+   - **Task 5 — 21 CFR Part 11 E-Signatures** (`564ed31`): Two-component electronic signature (Component 1: session `RequestContext`; Component 2: operator PIN re-authentication). RFC 8785 canonical JSON (`canonicalizeJson()`) for deterministic SHA-256 hash-chaining. Append-only compliance ledger with `verifyIntegrity()` tamper detection.
+   - **Task 6 — Perimeter Security** (`b8e8e0e`): Adminer excised (gated behind `debug` Docker profile). Caddy TLS 1.2–1.3 reverse proxy with HSTS and CSP. `SafeConnector` SSRF-safe DNS-pinned outbound connector with `WebhookTargetPolicy` blocking RFC1918/link-local/loopback/cloud metadata. Transactional bootstrap lockdown: `UNINITIALIZED → PROVISIONING → PRODUCTION_ACTIVE` (irreversible).
+   - **Task 7 — OT Gateway Hardening** (`e7d64f4`): 64KB frame overflow guard on Fuji NXT TCP gateway. Sync header validation for protocol compliance. 30-second idle timeout with graceful disconnect. `IpFirewall` for OT subnet allowlisting. DoS protections.
+   - **Task 8 — Disaster Recovery** (`c171571`): `DrVerificationService` verifying schema, EventStore monotonicity, ledger hash chain, and SHA-256 manifest integrity. `backup.sh` / `restore.sh` / `dr-drill.sh` executable scripts. RPO $\le 900$s, RTO $\le 7200$s SLA enforcement. `dr_drill_history` table with freshness enforcement ($\le 30$ days).
+   - **Task 9 — DevSecOps CI Pipeline & MES Doctor** (`97bcecc`): Blocking `npm audit` evaluated against `.audit-exceptions.json` (each exception requires advisory/CVE, package, rationale, owner, mitigation, expiresAt). Gitleaks secret scanning. SAST via `eslint-plugin-security`. MES Doctor CLI with 12 diagnostic modules (tri-state PASS/FAIL/NOT_VERIFIED; NOT_VERIFIED treated as FAIL). Deterministic release gate: $\text{BLOCKERS} = 0 \land \text{CRITICAL} = 0 \land \text{DOCTOR} = \text{PASS} \land \text{DR} = \text{VERIFIED} \land \text{TESTS} = \text{PASS}$.
+   - **Audit Closure** (`f7f9d77`): Security finding closure matrix mapping all 17 audit items (D.1–D.14, E.5, E.8, E.18) to remediation commits, automated tests, and MES Doctor verification modules. Independent re-audit report confirming 9.3/10 post-remediation score.
 
 ---
 
@@ -199,12 +211,12 @@ All codebase entities strictly adhere to the domain definitions locked in [`CONT
 
 ---
 
-## 5. Master Test Suite Matrix (23 Files, 176 Tests, 100% Green)
+## 5. Master Test Suite Matrix (33 Files, 261 Tests, 100% Green)
 
 ```text
-Test Files  23 passed (23)
-     Tests  176 passed (176)
-  Duration  8.20s
+Test Files  33 passed (33)
+     Tests  261 passed (261)
+  Duration  ~23s
 ```
 
 | Suite Name | Scope | Tests |
@@ -232,6 +244,16 @@ Test Files  23 passed (23)
 | `tests/projectors/smt-projector.test.ts` | SMT projector material and feeder slot read model updates | 3 |
 | `tests/projectors/core-projector.test.ts` | Core projector batch and machine state read model updates | 3 |
 | `tests/utils/clock.test.ts` | SystemClock and FakeClock deterministic time progression utilities | 2 |
+| `tests/reflow-closed-loop-phase-6.test.ts` | Reflow profiling, PWI engine, drift detection, interlock triad, audit integrity | 25 |
+| **`tests/tenant-isolation.test.ts`** | **ScopedRepository GLOBAL/ORG/SITE isolation, RequestContext enforcement** | **5** |
+| **`tests/auth-pin-security.test.ts`** | **Argon2id PIN hashing, anti-enumeration timing, backfill migration** | **6** |
+| **`tests/auth-token-rotation.test.ts`** | **Dual-token JWT, refresh session rotation, family-based anti-theft** | **5** |
+| **`tests/rbac-capabilities.test.ts`** | **Permission enum, role→capability map, SoD enforcement, route auth coverage** | **16** |
+| **`tests/compliance-part11-ledger.test.ts`** | **Two-component e-signature, RFC 8785 canonical JSON, hash chain tamper detection** | **5** |
+| **`tests/perimeter-egress.test.ts`** | **SSRF blocking, egress IP policy, DNS pinning, bootstrap state machine** | **7** |
+| **`tests/ot-fuji-security.test.ts`** | **64KB frame overflow guard, sync header validation, 30s idle timeout, DoS** | **6** |
+| **`tests/disaster-recovery.test.ts`** | **DR verification, manifest integrity, RPO/RTO SLA, drill freshness** | **5** |
+| **`tests/mes-doctor.test.ts`** | **12-module diagnostics, tri-state readiness, release attestation** | **5** |
 
 ---
 
@@ -275,8 +297,20 @@ quirky-pythagoras/
     │   │   ├── db/                            # Database connection, migrations, seed, schema.sql:
     │   │   │   ├── migrations/005_phase6_reflow_profiling.sql
     │   │   │   └── seed.ts (Line 01 & Line 02, AGV-01/02, Phase 6 thermal fixtures)
-    │   │   └── server.ts                      # Express app, TCP gateway, 20MB body bootstrap
-    │   └── tests/                             # Vitest automated test suites (24 files / 201 tests)
+    │   │   ├── security/                      # Security Infrastructure (Phase 9):
+    │   │   │   ├── context.ts                 # SecurityPrincipal, ServiceScope, RequestContext
+    │   │   │   ├── jwt.ts                     # TokenManager: 15-min access JWT, strict iss/aud
+    │   │   │   ├── session-manager.ts         # SHA-256 hashed refresh tokens, family anti-theft
+    │   │   │   ├── pin-policy.ts              # Argon2id/Bcrypt PIN hashing, anti-enumeration
+    │   │   │   ├── permissions.ts             # Permission enum, ROLE_PERMISSION_MAP, SoD
+    │   │   │   ├── canonical-json.ts          # RFC 8785 canonicalizeJson()
+    │   │   │   ├── safe-connector.ts          # SSRF-safe DNS-pinned outbound connector
+    │   │   │   ├── egress-policies.ts         # WebhookTargetPolicy, InternalServiceTargetPolicy
+    │   │   │   └── trusted-proxy.ts           # Client IP resolution, correlation IDs
+    │   │   ├── middleware/                     # Express middleware:
+    │   │   │   └── auth.middleware.ts          # authenticateToken, requirePermission, requireRoles
+    │   │   └── server.ts                      # Express app, TCP gateway, global auth middleware
+    │   └── tests/                             # Vitest automated test suites (33 files / 261 tests)
     └── web/                                   # React / TypeScript / Tailwind Cleanroom Cockpit
         └── src/
             ├── components/                    # Industrial station UIs:
@@ -287,6 +321,20 @@ quirky-pythagoras/
             │   ├── SpiStation.tsx, AoiStation.tsx, OperatorStation.tsx, etc.
             │   └── AndonTower.tsx
             └── App.tsx                        # Master tactile cockpit navigation (10 tabs)
+├── scripts/
+│   ├── mes-doctor.ts                          # MES Doctor 12-module pre-deployment diagnostics CLI
+│   ├── migrate-pins.ts                        # Idempotent plaintext→hash PIN migration
+│   ├── backup.sh                              # SHA-256 manifest backup package generator
+│   ├── restore.sh                             # Cryptographic restore & verification
+│   └── dr-drill.sh                            # Automated DR drill execution
+├── deploy/
+│   ├── ci/ci.yml                              # GitHub Actions CI: blocking audit, Gitleaks, SAST, Doctor
+│   └── caddy/Caddyfile                        # TLS 1.2-1.3 reverse proxy, HSTS, CSP
+├── docs/
+│   ├── audit/closure-matrix.md                # 17-finding closure matrix with commit traceability
+│   ├── audit/re-audit-report.md               # Independent re-audit: 4.3→9.3/10 verified scorecard
+│   └── architecture/ADR-001..003              # Architectural decision records
+└── .audit-exceptions.json                     # CI npm audit exception register (advisory, owner, expiry)
 ```
 
 ---
@@ -294,10 +342,19 @@ quirky-pythagoras/
 ## 7. Recommended Next Steps for Future Sessions
 
 When resuming in a new chat, the system is primed for the following high-value enterprise extensions:
-1. **Physical Industrial Gateway Pilots**:
+
+### Security Hardening Follow-Ups (Re-Audit Recommendations)
+1. **External Penetration Test**: Commission third-party pen test on deployed appliance with full scope (auth, RBAC, OT gateway, perimeter).
+2. **SBOM Generation**: Add CycloneDX SBOM to release attestation pipeline for supply-chain transparency.
+3. **Container Image Scanning**: Add Trivy/Grype to CI for container vulnerability scanning alongside npm audit.
+4. **Rate Limiting**: Add per-IP rate limiting at Caddy layer for auth endpoints (`/api/v1/auth/login`, `/api/v1/auth/refresh`).
+5. **SIEM Integration**: Forward structured security event logs to customer SIEM for centralized monitoring.
+
+### Functional Extensions
+6. **Physical Industrial Gateway Pilots**:
    - Transitioning `MockCfxAmqpBroker` to production Apache Qpid Proton / RabbitMQ AMQP 1.0 connection to physical Koh Young / Omron machines.
    - Deploying Fuji Nexim TCP gateway to physical shop-floor subnets with TLS encapsulation.
-2. **ERP & Warehouse Management (WMS) Bi-Directional Integration**:
+7. **ERP & Warehouse Management (WMS) Bi-Directional Integration**:
    - Implementing SAP S/4HANA or Oracle Cloud SCM connectors (IDoc / OData) syncing work orders, production confirmations, and raw inventory goods issues.
-3. **Edge Multi-Facility SMT Cluster Synchronization**:
+8. **Edge Multi-Facility SMT Cluster Synchronization**:
    - Establishing edge-to-cloud transactional event synchronization across disparate manufacturing facilities (e.g. Noida Cluster P4 $\leftrightarrow$ Chennai Mobile Cluster) via Kafka / Event Hubs.
