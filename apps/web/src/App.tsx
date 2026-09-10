@@ -6,7 +6,7 @@ import {
 import { SolderPasteStation } from './components/SolderPasteStation';
 import { OperatorStation } from './components/OperatorStation';
 import { SupervisorDashboard } from './components/SupervisorDashboard';
-import { GenealogyExplorer } from './components/GenealogyExplorer';
+import { TraceabilityStation } from './components/TraceabilityStation';
 import { AuditTrailViewer } from './components/AuditTrailViewer';
 import { CleanroomComplianceStation } from './components/CleanroomComplianceStation';
 import { AndonTower } from './components/AndonTower';
@@ -234,7 +234,7 @@ export const App: React.FC = () => {
         {activeTab === 'SOLDER_PASTE' && <SolderPasteStation />}
         {activeTab === 'OPERATOR' && <OperatorStation />}
         {activeTab === 'SUPERVISOR' && <SupervisorDashboard />}
-        {activeTab === 'GENEALOGY' && <GenealogyExplorer />}
+        {activeTab === 'GENEALOGY' && <TraceabilityStation />}
         {activeTab === 'AUDIT_TRAIL' && <AuditTrailViewer />}
         {activeTab === 'COMPLIANCE' && <CleanroomComplianceStation />}
         {activeTab === 'REWORK' && <ReworkStation />}
