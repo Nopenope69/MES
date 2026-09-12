@@ -11,12 +11,13 @@ console.log('\n=================================================================
 console.log('   🔨 BUILDING ANTIGRAVITY SMT MES STANDALONE EXECUTABLE (.EXE & MACOS)');
 console.log('================================================================================\n');
 
-// 1. Synchronize embedded SQLite DDL schema
-console.log('[1/7] Embedding SQLite DDL schema in TypeScript...');
-const schemaSql = fs.readFileSync(path.join(rootDir, 'apps/api/src/db/schema.sql'), 'utf-8');
-const schemaTs = `// Auto-generated embedded schema for standalone executable\nexport const EMBEDDED_SCHEMA_SQL = ${JSON.stringify(schemaSql)};\n`;
-fs.writeFileSync(path.join(rootDir, 'apps/api/src/db/schema-sql.ts'), schemaTs, 'utf-8');
-console.log('  ✓ apps/api/src/db/schema-sql.ts synchronized.');
+// 1. Verify schema file exists
+console.log('[1/7] Verifying SQLite DDL schema...');
+const schemaSqlPath = path.join(rootDir, 'apps/api/src/db/schema.sql');
+if (!fs.existsSync(schemaSqlPath)) {
+  throw new Error(`Schema file not found at ${schemaSqlPath}`);
+}
+console.log('  ✓ apps/api/src/db/schema.sql verified.');
 
 // 2. Build Shared Domain Library
 console.log('\n[2/7] Compiling @mes/shared library...');

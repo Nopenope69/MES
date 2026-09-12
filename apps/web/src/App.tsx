@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Tablet, Activity, GitFork, Terminal, Shield, 
-  Cpu, Radio, AlertCircle, Layers, Sliders
+  Cpu, Radio, AlertCircle, Layers, Sliders,
+  Key, Lock, LogOut, UserCheck
 } from 'lucide-react';
 import { SolderPasteStation } from './components/SolderPasteStation';
 import { OperatorStation } from './components/OperatorStation';
@@ -16,12 +17,52 @@ import { FleetDashboard } from './components/FleetDashboard';
 import { AgvLogisticsStation } from './components/AgvLogisticsStation';
 import { PredictiveIntelligenceStation } from './components/PredictiveIntelligenceStation';
 import { ReflowThermalStation } from './components/ReflowThermalStation';
+import { LoginModal } from './components/auth/LoginModal';
+import { authService, OperatorProfile, OperatorRole } from './services/auth.service';
 import { Crosshair, Truck, Split, Flame } from 'lucide-react';
 
 type NavTab = 'FLEET' | 'AGV_LOGISTICS' | 'PREDICTIVE' | 'REFLOW' | 'SPI' | 'SOLDER_PASTE' | 'OPERATOR' | 'SUPERVISOR' | 'GENEALOGY' | 'AUDIT_TRAIL' | 'COMPLIANCE' | 'REWORK';
 
+const TAB_ROLE_PERMISSIONS: Record<NavTab, OperatorRole[]> = {
+  SPI: ['OPERATOR', 'QUALITY_LEAD', 'LINE_LEAD', 'SYSTEM_ADMIN'],
+  SOLDER_PASTE: ['OPERATOR', 'QUALITY_LEAD', 'LINE_LEAD', 'SYSTEM_ADMIN'],
+  OPERATOR: ['OPERATOR', 'MAINTENANCE', 'LINE_LEAD', 'SYSTEM_ADMIN'],
+  SUPERVISOR: ['LINE_LEAD', 'SYSTEM_ADMIN', 'QUALITY_LEAD'],
+  GENEALOGY: ['OPERATOR', 'MAINTENANCE', 'QUALITY_LEAD', 'LINE_LEAD', 'SYSTEM_ADMIN'],
+  AUDIT_TRAIL: ['QUALITY_LEAD', 'SYSTEM_ADMIN'],
+  COMPLIANCE: ['QUALITY_LEAD', 'SYSTEM_ADMIN'],
+  REWORK: ['OPERATOR', 'QUALITY_LEAD', 'LINE_LEAD', 'SYSTEM_ADMIN'],
+  FLEET: ['LINE_LEAD', 'SYSTEM_ADMIN', 'QUALITY_LEAD'],
+  AGV_LOGISTICS: ['OPERATOR', 'LINE_LEAD', 'MAINTENANCE', 'SYSTEM_ADMIN'],
+  PREDICTIVE: ['QUALITY_LEAD', 'LINE_LEAD', 'SYSTEM_ADMIN'],
+  REFLOW: ['OPERATOR', 'MAINTENANCE', 'LINE_LEAD', 'SYSTEM_ADMIN']
+};
+
+const ROLE_BADGE_STYLES: Record<OperatorRole, { bg: string; text: string; border: string }> = {
+  OPERATOR: { bg: 'bg-emerald-500/10', text: 'text-[#00E699]', border: 'border-[#00E699]/30' },
+  MAINTENANCE: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/30' },
+  QUALITY_LEAD: { bg: 'bg-purple-500/10', text: 'text-purple-300', border: 'border-purple-500/30' },
+  LINE_LEAD: { bg: 'bg-sky-500/10', text: 'text-sky-400', border: 'border-sky-500/30' },
+  SYSTEM_ADMIN: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/30' }
+};
+
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('REFLOW');
+  const [operator, setOperator] = useState<OperatorProfile | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = authService.subscribe((state) => {
+      setOperator(state.operator);
+    });
+    return unsubscribe;
+  }, []);
+
+  const requiredRoles = TAB_ROLE_PERMISSIONS[activeTab];
+  // If not logged in, allow read-only access to general monitoring tabs, but gate privileged compliance and audit tabs
+  const isAllowedTab = !operator 
+    ? !['AUDIT_TRAIL', 'COMPLIANCE', 'SUPERVISOR'].includes(activeTab)
+    : authService.hasRole(...requiredRoles);
 
   return (
     <div className="min-h-screen bg-[#0B0F14] bg-pcb-grid text-[#F0F4F8] flex flex-col font-sans">
@@ -49,23 +90,55 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Machine Connection Telemetry Tag */}
-          <div className="hidden lg:flex items-center gap-4 text-xs font-mono bg-[#0C1117] px-3.5 py-1.5 rounded-lg border border-white/10">
-            <div className="flex items-center gap-1.5">
-              <Radio className="w-3.5 h-3.5 text-[#00E699]" />
-              <span className="text-[#7A8A9E]">TCP:</span>
-              <span className="text-white font-bold">30040</span>
+          {/* Machine Connection Telemetry & Operator Auth Tag */}
+          <div className="flex items-center gap-3">
+            <div className="hidden lg:flex items-center gap-4 text-xs font-mono bg-[#0C1117] px-3.5 py-1.5 rounded-lg border border-white/10">
+              <div className="flex items-center gap-1.5">
+                <Radio className="w-3.5 h-3.5 text-[#00E699]" />
+                <span className="text-[#7A8A9E]">TCP:</span>
+                <span className="text-white font-bold">30040</span>
+              </div>
+              <div className="h-3 w-px bg-white/15" />
+              <div>
+                <span className="text-[#7A8A9E]">PROGRAM:</span>{' '}
+                <span className="text-[#00E699] font-bold">PROG-SM-METER-TOP-REV4</span>
+              </div>
+              <div className="h-3 w-px bg-white/15" />
+              <div className="flex items-center gap-1 text-[#00E699]">
+                <Shield className="w-3.5 h-3.5" />
+                <span>INTERLOCK ARMED</span>
+              </div>
             </div>
-            <div className="h-3 w-px bg-white/15" />
-            <div>
-              <span className="text-[#7A8A9E]">PROGRAM:</span>{' '}
-              <span className="text-[#00E699] font-bold">PROG-SM-METER-TOP-REV4</span>
-            </div>
-            <div className="h-3 w-px bg-white/15" />
-            <div className="flex items-center gap-1 text-[#00E699]">
-              <Shield className="w-3.5 h-3.5" />
-              <span>INTERLOCK ARMED</span>
-            </div>
+
+            {/* Operator Session Tag */}
+            {operator ? (
+              <div className="flex items-center gap-3 bg-[#0C1117] px-3 py-1.5 rounded-lg border border-white/10 text-xs font-mono">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-3.5 h-3.5 text-[#00E699]" />
+                  <span className="text-white font-bold">{operator.code}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${ROLE_BADGE_STYLES[operator.role].bg} ${ROLE_BADGE_STYLES[operator.role].text} ${ROLE_BADGE_STYLES[operator.role].border}`}>
+                    {operator.role}
+                  </span>
+                </div>
+                <div className="h-3 w-px bg-white/15" />
+                <button
+                  onClick={() => authService.logout()}
+                  className="text-[#7A8A9E] hover:text-white flex items-center gap-1 hover:bg-white/5 px-1.5 py-0.5 rounded transition-all"
+                  title="Lock Station / Sign Out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">LOCK</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsLoginModalOpen(true)}
+                className="flex items-center gap-2 bg-[#18222F] hover:bg-[#202C3D] active:bg-[#00E699]/20 text-white hover:text-[#00E699] px-3.5 py-1.5 rounded-lg border border-white/15 hover:border-[#00E699]/40 text-xs font-mono font-bold transition-all shadow-sm"
+              >
+                <Key className="w-3.5 h-3.5 text-[#00E699]" />
+                <span>OPERATOR SIGN-IN</span>
+              </button>
+            )}
           </div>
 
           {/* Tactile Navigation Switches */}
@@ -226,19 +299,61 @@ export const App: React.FC = () => {
 
       {/* Main Instrument Display Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {activeTab === 'REFLOW' && <ReflowThermalStation />}
-        {activeTab === 'FLEET' && <FleetDashboard />}
-        {activeTab === 'AGV_LOGISTICS' && <AgvLogisticsStation />}
-        {activeTab === 'PREDICTIVE' && <PredictiveIntelligenceStation />}
-        {activeTab === 'SPI' && <SpiStation />}
-        {activeTab === 'SOLDER_PASTE' && <SolderPasteStation />}
-        {activeTab === 'OPERATOR' && <OperatorStation />}
-        {activeTab === 'SUPERVISOR' && <SupervisorDashboard />}
-        {activeTab === 'GENEALOGY' && <TraceabilityStation />}
-        {activeTab === 'AUDIT_TRAIL' && <AuditTrailViewer />}
-        {activeTab === 'COMPLIANCE' && <CleanroomComplianceStation />}
-        {activeTab === 'REWORK' && <ReworkStation />}
+        {!isAllowedTab ? (
+          <div className="bg-[#10161F] border border-red-500/30 rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-4 max-w-lg mx-auto mt-12 shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-red-950/40 border border-red-500/40 flex items-center justify-center text-red-400">
+              <Lock className="w-7 h-7" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white font-mono uppercase tracking-wider">
+                Access Restricted: Privileged Station
+              </h2>
+              <p className="text-xs text-[#7A8A9E] mt-1 font-mono">
+                Station <span className="text-white font-bold">{activeTab}</span> requires authorized credentials.
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5 mt-3">
+                {requiredRoles.map((r) => (
+                  <span key={r} className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/5 border border-white/10 text-white/70">
+                    {r}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => setIsLoginModalOpen(true)}
+              className="mt-2 px-6 py-2.5 bg-[#00E699] hover:bg-[#00c784] text-[#0B0F14] font-mono text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-[#00E699]/20"
+            >
+              <Key className="w-4 h-4" />
+              <span>{operator ? 'SWITCH OPERATOR / OVERRIDE' : 'OPERATOR SIGN-IN'}</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'REFLOW' && <ReflowThermalStation />}
+            {activeTab === 'FLEET' && <FleetDashboard />}
+            {activeTab === 'AGV_LOGISTICS' && <AgvLogisticsStation />}
+            {activeTab === 'PREDICTIVE' && <PredictiveIntelligenceStation />}
+            {activeTab === 'SPI' && <SpiStation />}
+            {activeTab === 'SOLDER_PASTE' && <SolderPasteStation />}
+            {activeTab === 'OPERATOR' && <OperatorStation />}
+            {activeTab === 'SUPERVISOR' && <SupervisorDashboard />}
+            {activeTab === 'GENEALOGY' && <TraceabilityStation />}
+            {activeTab === 'AUDIT_TRAIL' && <AuditTrailViewer />}
+            {activeTab === 'COMPLIANCE' && <CleanroomComplianceStation />}
+            {activeTab === 'REWORK' && <ReworkStation />}
+          </>
+        )}
       </main>
+
+      {/* Operator Authentication Modal (Gate G-08) */}
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+        onSuccess={(loggedOp) => {
+          setOperator(loggedOp);
+          setIsLoginModalOpen(false);
+        }} 
+      />
 
       {/* Micro-Telemetry Bottom HUD */}
       <footer className="bg-[#0D1219] border-t border-white/10 px-6 py-2.5 text-xs font-mono text-[#7A8A9E]">

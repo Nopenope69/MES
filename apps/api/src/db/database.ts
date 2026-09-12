@@ -1,7 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 import type { DatabaseSync } from 'node:sqlite';
-import { Pool } from 'pg';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import pg, { Pool } from 'pg';
+import { MigrationRunner } from './migration-runner';
+
+const activeTxStorage = new AsyncLocalStorage<IDatabase>();
+
+// Ensure PostgreSQL parses int8 / bigint / COUNT(*) aggregates as numbers when safe
+pg.types.setTypeParser(20, (val: string) => {
+  const num = Number(val);
+  return Number.isSafeInteger(num) ? num : val;
+});
 
 export interface IDatabase {
   query<T = any>(sql: string, params?: any[]): Promise<T[]>;
@@ -11,10 +21,112 @@ export interface IDatabase {
   withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T>;
 }
 
+/**
+ * Tokenizer-safe SQL parameter mapper for PostgreSQL.
+ * Converts '?' parameter placeholders to numbered '$1', '$2', etc.
+ * Ignores '?' characters appearing inside single-quoted string literals ('...'),
+ * double-quoted identifiers ("..."), line comments (-- ...), and block comments.
+ */
+export function convertSqlPlaceholders(sql: string): string {
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let paramIndex = 1;
+  let result = '';
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const nextChar = i + 1 < sql.length ? sql[i + 1] : '';
+
+    if (inLineComment) {
+      result += char;
+      if (char === '\n') {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      result += char;
+      if (char === '*' && nextChar === '/') {
+        result += nextChar;
+        i++;
+        inBlockComment = false;
+      }
+      continue;
+    }
+
+    if (inSingleQuote) {
+      result += char;
+      if (char === "'" && nextChar === "'") {
+        result += nextChar;
+        i++;
+      } else if (char === '\\' && nextChar === "'") {
+        result += nextChar;
+        i++;
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      result += char;
+      if (char === '"' && nextChar === '"') {
+        result += nextChar;
+        i++;
+      } else if (char === '\\' && nextChar === '"') {
+        result += nextChar;
+        i++;
+      } else if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (char === '-' && nextChar === '-') {
+      inLineComment = true;
+      result += char + nextChar;
+      i++;
+      continue;
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true;
+      result += char + nextChar;
+      i++;
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      result += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      result += char;
+      continue;
+    }
+
+    if (char === '?') {
+      result += `$${paramIndex++}`;
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
 let DatabaseSyncClass: any = null;
 
 class NodeSqliteDatabase implements IDatabase {
   private db: DatabaseSync;
+  private transactionQueue: Promise<void> = Promise.resolve();
 
   constructor(dbPath: string) {
     if (!DatabaseSyncClass) {
@@ -49,31 +161,55 @@ class NodeSqliteDatabase implements IDatabase {
     this.db.close();
   }
 
-  private transactionDepth = 0;
-
   async withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T> {
-    const isTopLevel = this.transactionDepth === 0;
-    if (isTopLevel) {
-      this.db.exec('BEGIN IMMEDIATE;');
+    const currentTx = activeTxStorage.getStore();
+    if (currentTx) {
+      return currentTx.withTransaction(fn);
     }
-    this.transactionDepth++;
+
+    const previousQueue = this.transactionQueue;
+    let releaseLock: () => void;
+    this.transactionQueue = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    await previousQueue;
     try {
-      const result = await fn(this);
-      this.transactionDepth--;
-      if (isTopLevel) {
-        this.db.exec('COMMIT;');
-      }
+      this.db.exec('BEGIN IMMEDIATE;');
+      const txDb: IDatabase = {
+        query: (sql, params) => this.query(sql, params),
+        execute: (sql, params) => this.execute(sql, params),
+        execScript: (sqlScript) => this.execScript(sqlScript),
+        close: async () => {},
+        withTransaction: async (nestedFn) => {
+          const savepoint = `sp_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+          this.db.exec(`SAVEPOINT ${savepoint};`);
+          try {
+            const res = await activeTxStorage.run(txDb, () => nestedFn(txDb));
+            this.db.exec(`RELEASE SAVEPOINT ${savepoint};`);
+            return res;
+          } catch (err) {
+            try {
+              this.db.exec(`ROLLBACK TO SAVEPOINT ${savepoint};`);
+            } catch {
+              // Ignored if already rolled back
+            }
+            throw err;
+          }
+        }
+      };
+      const result = await activeTxStorage.run(txDb, () => fn(txDb));
+      this.db.exec('COMMIT;');
       return result;
     } catch (error) {
-      this.transactionDepth--;
-      if (isTopLevel) {
-        try {
-          this.db.exec('ROLLBACK;');
-        } catch {
-          // Ignored if already rolled back
-        }
+      try {
+        this.db.exec('ROLLBACK;');
+      } catch {
+        // Ignored if already rolled back
       }
       throw error;
+    } finally {
+      releaseLock!();
     }
   }
 }
@@ -86,15 +222,13 @@ class PostgresDatabase implements IDatabase {
   }
 
   async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
-    let index = 1;
-    const pgSql = sql.replace(/\?/g, () => `$${index++}`);
+    const pgSql = convertSqlPlaceholders(sql);
     const res = await this.pool.query(pgSql, params);
     return res.rows as T[];
   }
 
   async execute(sql: string, params: any[] = []): Promise<{ changes: number; lastInsertRowid?: number }> {
-    let index = 1;
-    const pgSql = sql.replace(/\?/g, () => `$${index++}`);
+    const pgSql = convertSqlPlaceholders(sql);
     const res = await this.pool.query(pgSql, params);
     return { changes: res.rowCount ?? 0 };
   }
@@ -108,19 +242,22 @@ class PostgresDatabase implements IDatabase {
   }
 
   async withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T> {
+    const currentTx = activeTxStorage.getStore();
+    if (currentTx) {
+      return currentTx.withTransaction(fn);
+    }
+
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       const txDb: IDatabase = {
         query: async (sql, params = []) => {
-          let index = 1;
-          const pgSql = sql.replace(/\?/g, () => `$${index++}`);
+          const pgSql = convertSqlPlaceholders(sql);
           const res = await client.query(pgSql, params);
           return res.rows;
         },
         execute: async (sql, params = []) => {
-          let index = 1;
-          const pgSql = sql.replace(/\?/g, () => `$${index++}`);
+          const pgSql = convertSqlPlaceholders(sql);
           const res = await client.query(pgSql, params);
           return { changes: res.rowCount ?? 0 };
         },
@@ -128,9 +265,20 @@ class PostgresDatabase implements IDatabase {
           await client.query(sqlScript);
         },
         close: async () => {},
-        withTransaction: (nestedFn) => nestedFn(txDb)
+        withTransaction: async (nestedFn) => {
+          const savepoint = `sp_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+          await client.query(`SAVEPOINT ${savepoint}`);
+          try {
+            const res = await activeTxStorage.run(txDb, () => nestedFn(txDb));
+            await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+            return res;
+          } catch (err) {
+            await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+            throw err;
+          }
+        }
       };
-      const result = await fn(txDb);
+      const result = await activeTxStorage.run(txDb, () => fn(txDb));
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -143,8 +291,6 @@ class PostgresDatabase implements IDatabase {
 }
 
 let dbInstance: IDatabase | null = null;
-
-import { EMBEDDED_SCHEMA_SQL } from './schema-sql';
 
 export function getDatabase(): IDatabase {
   if (dbInstance) return dbInstance;
@@ -165,187 +311,36 @@ export function getDatabase(): IDatabase {
 
 export async function initDatabase(): Promise<void> {
   const db = getDatabase();
-  let schemaSql = EMBEDDED_SCHEMA_SQL;
-  try {
-    const directPath = path.resolve(__dirname, 'schema.sql');
-    const relPath = path.resolve(__dirname, '../../src/db/schema.sql');
-    const cwdPath = path.resolve(process.cwd(), 'schema.sql');
-    if (fs.existsSync(directPath)) {
-      schemaSql = fs.readFileSync(directPath, 'utf-8');
-    } else if (fs.existsSync(relPath)) {
-      schemaSql = fs.readFileSync(relPath, 'utf-8');
-    } else if (fs.existsSync(cwdPath)) {
-      schemaSql = fs.readFileSync(cwdPath, 'utf-8');
-    }
-  } catch {
-    // Graceful fallback to EMBEDDED_SCHEMA_SQL
-  }
-  await db.execScript(schemaSql);
-  try {
-    await db.execute('ALTER TABLE ingress_events ADD COLUMN decoded_payload TEXT;');
-  } catch {}
-
-  const reelCols = [
-    "ALTER TABLE component_reels ADD COLUMN msl_class VARCHAR(8) DEFAULT 'MSL_1';",
-    "ALTER TABLE component_reels ADD COLUMN mbb_opened_at TIMESTAMP;",
-    "ALTER TABLE component_reels ADD COLUMN mbb_resealed_at TIMESTAMP;",
-    "ALTER TABLE component_reels ADD COLUMN storage_location VARCHAR(64) DEFAULT 'FACTORY_FLOOR';",
-    "ALTER TABLE component_reels ADD COLUMN storage_state VARCHAR(32) DEFAULT 'AMBIENT_EXPOSURE';",
-    "ALTER TABLE component_reels ADD COLUMN floor_clock_state VARCHAR(32) DEFAULT 'FLOOR_EXPOSURE';",
-    "ALTER TABLE component_reels ADD COLUMN floor_life_nominal_minutes INTEGER DEFAULT 999999;",
-    "ALTER TABLE component_reels ADD COLUMN floor_life_expires_at TIMESTAMP;",
-    "ALTER TABLE component_reels ADD COLUMN hic_status VARCHAR(32) DEFAULT 'OK';",
-    "ALTER TABLE component_reels ADD COLUMN hic_verified_at TIMESTAMP;",
-    "ALTER TABLE component_reels ADD COLUMN hic_verified_by VARCHAR(64);",
-    "ALTER TABLE component_reels ADD COLUMN bake_status VARCHAR(32) DEFAULT 'NOT_REQUIRED';",
-    "ALTER TABLE component_reels ADD COLUMN bake_started_at TIMESTAMP;",
-    "ALTER TABLE component_reels ADD COLUMN last_bake_profile_id VARCHAR(64);",
-    "ALTER TABLE component_reels ADD COLUMN last_bake_completed_at TIMESTAMP;"
+  let schemaSql = '';
+  const candidatePaths = [
+    path.resolve(__dirname, 'schema.sql'),
+    path.resolve(__dirname, '../../src/db/schema.sql'),
+    path.resolve(process.cwd(), 'schema.sql'),
+    path.resolve(process.cwd(), 'apps/api/src/db/schema.sql')
   ];
-  for (const sql of reelCols) {
-    try { await db.execute(sql); } catch {}
+
+  for (const candidate of candidatePaths) {
+    if (fs.existsSync(candidate)) {
+      schemaSql = fs.readFileSync(candidate, 'utf-8');
+      break;
+    }
   }
 
-  // Track A: Event Sourcing & Projection Schema Migrations
-  try {
-    await db.execute("ALTER TABLE production_events ADD COLUMN schema_version VARCHAR(16) DEFAULT '1.0.0';");
-  } catch {}
+  if (!schemaSql) {
+    throw new Error('[DB] Could not locate schema.sql across candidate search paths');
+  }
 
-  try {
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS projection_checkpoints (
-        projection_name VARCHAR(64) PRIMARY KEY,
-        last_event_id VARCHAR(64),
-        last_event_time TIMESTAMP,
-        events_processed BIGINT DEFAULT 0,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS projection_snapshots (
-        id VARCHAR(64) PRIMARY KEY,
-        aggregate_type VARCHAR(64) NOT NULL,
-        aggregate_id VARCHAR(64) NOT NULL,
-        snapshot_version BIGINT NOT NULL,
-        state_json TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-  } catch {}
+  await db.execScript(schemaSql);
 
-  // Track B: Compliance & Industrial Audit Readiness Migrations
-  try {
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS compliance_audit_ledger (
-        id VARCHAR(64) PRIMARY KEY,
-        sequence_number BIGINT UNIQUE NOT NULL,
-        previous_hash VARCHAR(64) NOT NULL,
-        current_hash VARCHAR(64) NOT NULL,
-        actor_id VARCHAR(64) NOT NULL,
-        actor_role VARCHAR(64) NOT NULL,
-        action_type VARCHAR(64) NOT NULL,
-        meaning VARCHAR(256) NOT NULL,
-        entity_type VARCHAR(64) NOT NULL,
-        entity_id VARCHAR(64) NOT NULL,
-        metadata_json TEXT NOT NULL,
-        signed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS device_history_records (
-        id VARCHAR(64) PRIMARY KEY,
-        dhr_number VARCHAR(64) UNIQUE NOT NULL,
-        batch_id VARCHAR(64) NOT NULL,
-        product_code VARCHAR(64) NOT NULL,
-        work_order_number VARCHAR(64) NOT NULL,
-        manufactured_quantity DECIMAL(12, 3) NOT NULL,
-        released_quantity DECIMAL(12, 3) NOT NULL,
-        status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
-        qa_reviewer_id VARCHAR(64),
-        qa_released_at TIMESTAMP,
-        dhr_payload_json TEXT NOT NULL,
-        sha256_checksum VARCHAR(64) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-  } catch {}
-
-  // Tenant & Site Scoping Migrations (Section 1)
-  try {
-    await db.execute("ALTER TABLE batches ADD COLUMN organization_id VARCHAR(64) DEFAULT 'org-dixon';");
-  } catch {}
-  try {
-    await db.execute("ALTER TABLE batches ADD COLUMN site_id VARCHAR(64) DEFAULT 'site-noida-p4';");
-  } catch {}
-
-  try {
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS organization_settings (
-        organization_id VARCHAR(64) NOT NULL,
-        setting_key VARCHAR(64) NOT NULL,
-        setting_value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (organization_id, setting_key)
-      );
-    `);
-  } catch {}
-
-  // Operator Credentials & Lockout Migrations (Section 2)
-  try { await db.execute("ALTER TABLE operators ADD COLUMN pin_hash VARCHAR(255);"); } catch {}
-  try { await db.execute("ALTER TABLE operators ADD COLUMN failed_login_attempts INTEGER DEFAULT 0;"); } catch {}
-  try { await db.execute("ALTER TABLE operators ADD COLUMN locked_until TIMESTAMP;"); } catch {}
-  try { await db.execute("ALTER TABLE operators ADD COLUMN status VARCHAR(24) DEFAULT 'ACTIVE';"); } catch {}
-  try { await db.execute("ALTER TABLE operators ADD COLUMN last_login_at TIMESTAMP;"); } catch {}
-  try { await db.execute("ALTER TABLE operators ADD COLUMN authz_version INTEGER DEFAULT 1;"); } catch {}
-  try { await db.execute("ALTER TABLE operators ADD COLUMN organization_id VARCHAR(64) DEFAULT 'org-dixon';"); } catch {}
-  try { await db.execute("ALTER TABLE operators ADD COLUMN site_id VARCHAR(64) DEFAULT 'site-noida-p4';"); } catch {}
-
-  // Dual-Token Refresh Sessions (Section 2 / Task 3)
-  try {
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS refresh_tokens (
-        id VARCHAR(64) PRIMARY KEY,
-        operator_id VARCHAR(64) NOT NULL,
-        token_hash VARCHAR(64) UNIQUE NOT NULL,
-        family_id VARCHAR(64) NOT NULL,
-        revoked INTEGER DEFAULT 0,
-        revoked_reason VARCHAR(64),
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        created_by_ip VARCHAR(64) NOT NULL,
-        authz_version INTEGER DEFAULT 1
-      );
-    `);
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);");
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id);");
-  } catch {}
-
-  // Disaster Recovery Drill History (Section 5 / Task 8)
-  try {
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS dr_drill_history (
-        drill_id VARCHAR(64) PRIMARY KEY,
-        drill_version VARCHAR(32) NOT NULL,
-        backup_timestamp TIMESTAMP NOT NULL,
-        drill_started_at TIMESTAMP NOT NULL,
-        drill_completed_at TIMESTAMP NOT NULL,
-        rpo_seconds INTEGER NOT NULL,
-        rto_seconds INTEGER NOT NULL,
-        schema_valid INTEGER NOT NULL DEFAULT 0,
-        event_store_valid INTEGER NOT NULL DEFAULT 0,
-        ledger_integrity INTEGER NOT NULL DEFAULT 0,
-        manifest_integrity INTEGER NOT NULL DEFAULT 0,
-        status VARCHAR(32) NOT NULL,
-        failure_reason TEXT
-      );
-    `);
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_dr_drill_status ON dr_drill_history(status, drill_completed_at);");
-  } catch {}
-
-  // Traceability & Reflow Linkage (Phase 10)
-  try {
-    await db.execute("ALTER TABLE panel_checkouts ADD COLUMN profile_run_id VARCHAR(64);");
-  } catch {}
+  // If connected to PostgreSQL, execute the enterprise migration chain (001-006)
+  const isPostgres = Boolean(process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('postgres://') || process.env.DATABASE_URL.startsWith('postgresql://')));
+  if (isPostgres) {
+    const migrationsDir = path.resolve(__dirname, 'migrations');
+    if (fs.existsSync(migrationsDir)) {
+      const runner = new MigrationRunner(migrationsDir);
+      await runner.runPendingMigrations(db);
+    }
+  }
 
   console.log('[DB] Schema verified and initialized.');
 }

@@ -226,14 +226,24 @@ async function bootstrap() {
     SecretsConfigManager.loadConfig();
     await initDatabase();
 
-    // Auto-seed if database is unpopulated
+    // Check database population status
     const db = getDatabase();
-    const countRows = await db.query<{ cnt: number }>('SELECT COUNT(*) as cnt FROM component_reels');
-    if (countRows.length === 0 || countRows[0].cnt === 0) {
-      console.log('[API] Empty database detected, running initial seed...');
-      await seedDatabase();
+    const countRows = await db.query<{ cnt: number | string }>('SELECT COUNT(*) as cnt FROM component_reels');
+    const isEmpty = countRows.length === 0 || Number(countRows[0].cnt) === 0;
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (isEmpty) {
+      if (!isProduction) {
+        console.log('[API] Empty database detected in development mode, running initial seed...');
+        await seedDatabase();
+        await OnboardingService.setState('PRODUCTION_ACTIVE');
+      } else {
+        console.log('[API] Fresh production deployment detected. Auto-seed disabled. Awaiting bootstrap via /api/v1/auth/bootstrap.');
+        await OnboardingService.setState('PROVISIONING_REQUIRED');
+      }
+    } else {
+      await OnboardingService.refreshStateFromDb();
     }
-    OnboardingService.setState('PRODUCTION_ACTIVE');
 
     // Start Fuji Nexim TCP Socket Gateway (Default Port 30040)
     const fujiPort = parseInt(process.env.FUJI_PORT || '30040', 10);

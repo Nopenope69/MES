@@ -2,7 +2,7 @@
 import { getDatabase } from '../db/database';
 import { PinPolicy } from '../security/pin-policy';
 
-export type ProvisioningState = 'UNINITIALIZED' | 'PROVISIONING' | 'PRODUCTION_ACTIVE';
+export type ProvisioningState = 'UNINITIALIZED' | 'PROVISIONING' | 'PROVISIONING_REQUIRED' | 'PRODUCTION_ACTIVE';
 
 export interface ProvisioningPayload {
   organizationId?: string;
@@ -31,12 +31,49 @@ export class OnboardingService {
     return this.currentState;
   }
 
-  public static setState(state: ProvisioningState): void {
+  public static async refreshStateFromDb(): Promise<ProvisioningState> {
+    const db = getDatabase();
+    try {
+      const rows = await db.query<{ setting_value: string }>(
+        "SELECT setting_value FROM system_settings WHERE setting_key = 'lifecycle_state'"
+      );
+      if (rows.length > 0 && rows[0].setting_value) {
+        this.currentState = rows[0].setting_value as ProvisioningState;
+        return this.currentState;
+      }
+      // If setting is absent, check if any SYSTEM_ADMIN exists in operators
+      const admins = await db.query("SELECT id FROM operators WHERE role = 'SYSTEM_ADMIN' LIMIT 1");
+      if (admins.length > 0) {
+        this.currentState = 'PRODUCTION_ACTIVE';
+        await this.setState('PRODUCTION_ACTIVE');
+        return 'PRODUCTION_ACTIVE';
+      }
+      return this.currentState;
+    } catch {
+      return this.currentState;
+    }
+  }
+
+  public static async setState(state: ProvisioningState): Promise<void> {
     this.currentState = state;
+    const db = getDatabase();
+    try {
+      await db.execute("DELETE FROM system_settings WHERE setting_key = 'lifecycle_state'");
+      await db.execute(
+        "INSERT INTO system_settings (setting_key, setting_value, updated_at) VALUES ('lifecycle_state', ?, CURRENT_TIMESTAMP)",
+        [state]
+      );
+    } catch {
+      // Handled gracefully in memory if DB table not yet ready
+    }
   }
 
   public static reset(): void {
     this.currentState = 'UNINITIALIZED';
+    try {
+      const db = getDatabase();
+      db.execute("DELETE FROM system_settings WHERE setting_key = 'lifecycle_state'").catch(() => {});
+    } catch {}
   }
 
   public static isBootstrapAvailable(): boolean {
@@ -51,6 +88,8 @@ export class OnboardingService {
     payload: ProvisioningPayload,
     options?: { simulateFailureStep?: 'ORG' | 'ADMIN' | 'HIERARCHY' | 'SECRETS' }
   ): Promise<ProvisioningResult> {
+    await this.refreshStateFromDb();
+
     if (this.currentState === 'PRODUCTION_ACTIVE') {
       const err = new Error(
         'APPLIANCE_ALREADY_PROVISIONED: Edge appliance is already in PRODUCTION_ACTIVE state. Bootstrap is permanently unmounted.'
@@ -65,8 +104,10 @@ export class OnboardingService {
       throw err;
     }
 
-    // Begin State Transition: UNINITIALIZED -> PROVISIONING
-    this.currentState = 'PROVISIONING';
+    const previousState = this.currentState;
+
+    // Begin State Transition: PROVISIONING
+    await this.setState('PROVISIONING');
 
     const db = getDatabase();
 
@@ -147,6 +188,12 @@ export class OnboardingService {
           [orgId, 'provisioned_at', now]
         );
 
+        // Step 5: Transition and persist system lifecycle state
+        await tx.execute("DELETE FROM system_settings WHERE setting_key = 'lifecycle_state'");
+        await tx.execute(
+          "INSERT INTO system_settings (setting_key, setting_value, updated_at) VALUES ('lifecycle_state', 'PRODUCTION_ACTIVE', CURRENT_TIMESTAMP)"
+        );
+
         return {
           organizationId: orgId,
           siteId,
@@ -160,8 +207,9 @@ export class OnboardingService {
       this.currentState = 'PRODUCTION_ACTIVE';
       return result;
     } catch (err) {
-      // Rollback guarantee: complete reversion to UNINITIALIZED
-      this.currentState = 'UNINITIALIZED';
+      // Rollback guarantee: complete reversion to previous state
+      this.currentState = previousState;
+      await this.setState(previousState).catch(() => {});
       throw err;
     }
   }

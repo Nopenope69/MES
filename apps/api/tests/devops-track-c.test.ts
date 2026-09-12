@@ -10,8 +10,8 @@ describe('Track C: DevOps, Packaging & Factory-Edge Deployment Suite', () => {
     expect(fs.existsSync(dockerfilePath)).toBe(true);
 
     const content = fs.readFileSync(dockerfilePath, 'utf-8');
-    expect(content).toContain('FROM node:20-alpine AS builder');
-    expect(content).toContain('FROM node:20-alpine AS runner');
+    expect(content).toMatch(/FROM node:(20|22)-alpine AS builder/);
+    expect(content).toMatch(/FROM node:(20|22)-alpine AS runner/);
     expect(content).toContain('EXPOSE 4000 30040');
     expect(content).toContain('dumb-init');
     expect(content).toContain('USER mesuser');
@@ -27,7 +27,7 @@ describe('Track C: DevOps, Packaging & Factory-Edge Deployment Suite', () => {
     expect(fs.existsSync(nginxConfPath)).toBe(true);
 
     const dockerContent = fs.readFileSync(dockerfilePath, 'utf-8');
-    expect(dockerContent).toContain('FROM node:20-alpine AS builder');
+    expect(dockerContent).toMatch(/FROM node:(20|22)-alpine AS builder/);
     expect(dockerContent).toContain('FROM nginx:1.27-alpine AS runner');
     expect(dockerContent).toContain('COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf');
     expect(dockerContent).toContain('EXPOSE 80');

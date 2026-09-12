@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'http';
 import net from 'net';
 import { app } from '../src/server';
-import { initDatabase } from '../src/db/database';
+import { initDatabase, getDatabase } from '../src/db/database';
 import { seedDatabase } from '../src/db/seed';
 import { IpFirewall } from '../src/security/ip-firewall';
 import { SimpleRateLimiter } from '../src/security/http-security';
@@ -238,6 +238,12 @@ describe('Track G: Security Hardening & Secrets Hygiene Suite', () => {
 
   describe('6. Regulatory API Authentication Gate', () => {
     it('blocks unauthorized access to DHR release without valid API key and allows with valid key', async () => {
+      // Ensure DHR is in DRAFT state prior to testing release endpoint (prevents state leakage from previous test suites)
+      const db = getDatabase();
+      await db.execute(
+        "UPDATE device_history_records SET status = 'DRAFT', qa_reviewer_id = NULL, qa_released_at = NULL WHERE dhr_number = 'DHR-JOB-SM-260901'"
+      );
+
       const config = SecretsConfigManager.loadConfig();
 
       // 1. Missing API Key -> 401 Unauthorized

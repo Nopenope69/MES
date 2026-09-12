@@ -365,7 +365,9 @@ async function checkReleaseAttestation(): Promise<DiagnosticModule> {
   const start = Date.now();
   try {
     const root = path.resolve(__dirname, '..');
-    const ciPath = path.join(root, 'deploy/ci/ci.yml');
+    const ciPath = fs.existsSync(path.join(root, '.github/workflows/ci.yml'))
+      ? path.join(root, '.github/workflows/ci.yml')
+      : path.join(root, 'deploy/ci/ci.yml');
 
     if (!fs.existsSync(ciPath)) {
       return { name: 'release-attestation', status: 'FAIL', detail: 'CI pipeline configuration not found', durationMs: Date.now() - start };

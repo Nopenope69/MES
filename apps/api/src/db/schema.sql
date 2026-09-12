@@ -9,6 +9,12 @@ CREATE TABLE IF NOT EXISTS organizations (
   name VARCHAR(128) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS system_settings (
+  setting_key VARCHAR(64) PRIMARY KEY,
+  setting_value TEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS sites (
   id VARCHAR(64) PRIMARY KEY,
   organization_id VARCHAR(64) NOT NULL,
@@ -102,7 +108,15 @@ CREATE TABLE IF NOT EXISTS operators (
   code VARCHAR(32) UNIQUE NOT NULL,
   name VARCHAR(128) NOT NULL,
   role VARCHAR(32) NOT NULL DEFAULT 'OPERATOR',
-  pin VARCHAR(16) NOT NULL
+  pin VARCHAR(16),
+  pin_hash VARCHAR(255),
+  failed_login_attempts INTEGER DEFAULT 0,
+  locked_until TIMESTAMP,
+  status VARCHAR(24) DEFAULT 'ACTIVE',
+  last_login_at TIMESTAMP,
+  authz_version INTEGER DEFAULT 1,
+  organization_id VARCHAR(64) DEFAULT 'org-default',
+  site_id VARCHAR(64) DEFAULT 'site-default'
 );
 
 CREATE TABLE IF NOT EXISTS shifts (
@@ -309,7 +323,9 @@ CREATE TABLE IF NOT EXISTS batches (
   unit VARCHAR(16) NOT NULL DEFAULT 'PANEL',
   started_at TIMESTAMP,
   completed_at TIMESTAMP,
-  operator_id VARCHAR(64)
+  operator_id VARCHAR(64),
+  organization_id VARCHAR(64) DEFAULT 'org-default',
+  site_id VARCHAR(64) DEFAULT 'site-default'
 );
 
 -- Individual Panel Checkout Records (From PRODCOMPLETED / PCBCHECKOUT)
@@ -349,7 +365,7 @@ CREATE TABLE IF NOT EXISTS ingress_events (
   source_adapter VARCHAR(64) NOT NULL,
   source_address VARCHAR(128),
   protocol VARCHAR(32) NOT NULL,
-  raw_payload BLOB NOT NULL,
+  raw_payload BYTEA NOT NULL,
   decoded_payload TEXT,
   sequence_id BIGINT,
   processed_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
@@ -1046,3 +1062,14 @@ CREATE TABLE IF NOT EXISTS dr_drill_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_dr_drill_status ON dr_drill_history(status, drill_completed_at);
+
+-- ============================================================================
+-- Tenant & Organization Settings
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS organization_settings (
+  organization_id VARCHAR(64) NOT NULL,
+  setting_key VARCHAR(64) NOT NULL,
+  setting_value TEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (organization_id, setting_key)
+);
