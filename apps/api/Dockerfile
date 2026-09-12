@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.4
 # Multi-stage production build for MES API Engine
 # Stage 1: Build stage
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -30,7 +30,7 @@ RUN npm --workspace=@mes/api run build
 RUN npm prune --production
 
 # Stage 2: Hardened, minimal production runtime
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 

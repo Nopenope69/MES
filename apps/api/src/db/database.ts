@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { Pool } from 'pg';
 
 export interface IDatabase {
@@ -11,11 +11,22 @@ export interface IDatabase {
   withTransaction<T>(fn: (tx: IDatabase) => Promise<T>): Promise<T>;
 }
 
+let DatabaseSyncClass: any = null;
+
 class NodeSqliteDatabase implements IDatabase {
   private db: DatabaseSync;
 
   constructor(dbPath: string) {
-    this.db = new DatabaseSync(dbPath);
+    if (!DatabaseSyncClass) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const sqliteModule = require('node:sqlite');
+        DatabaseSyncClass = sqliteModule.DatabaseSync;
+      } catch (err: any) {
+        throw new Error(`[DB] Built-in node:sqlite is unavailable in this runtime environment: ${err?.message || err}. For production environments, configure DATABASE_URL for PostgreSQL 16+. For SQLite simulator, ensure Node.js >= 22.x is used.`);
+      }
+    }
+    this.db = new DatabaseSyncClass(dbPath) as DatabaseSync;
     this.db.exec('PRAGMA journal_mode = WAL;');
   }
 
