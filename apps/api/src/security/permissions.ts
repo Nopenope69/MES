@@ -8,7 +8,8 @@ export enum Permission {
   SYSTEM_MANAGE = 'SYSTEM_MANAGE',
   SECURITY_ADMIN = 'SECURITY_ADMIN',
   REPORTS_VIEW = 'REPORTS_VIEW',
-  COMPLIANCE_SIGN = 'COMPLIANCE_SIGN'
+  COMPLIANCE_SIGN = 'COMPLIANCE_SIGN',
+  HOLD_ACKNOWLEDGE = 'HOLD_ACKNOWLEDGE'
 }
 
 export type Role =
@@ -45,7 +46,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<string, ReadonlySet<Permission>>>
   QUALITY_LEAD: new Set([
     Permission.QUALITY_APPROVE,
     Permission.COMPLIANCE_SIGN,
-    Permission.REPORTS_VIEW
+    Permission.REPORTS_VIEW,
+    Permission.HOLD_ACKNOWLEDGE
   ]),
 
   LINE_LEAD: new Set([
@@ -53,7 +55,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<string, ReadonlySet<Permission>>>
     Permission.EQUIPMENT_MAINTAIN,
     Permission.RECIPE_MANAGE,
     Permission.COMPLIANCE_SIGN,
-    Permission.REPORTS_VIEW
+    Permission.REPORTS_VIEW,
+    Permission.HOLD_ACKNOWLEDGE
   ]),
 
   SYSTEM_ADMIN: new Set([
@@ -71,26 +74,30 @@ export const ROLE_PERMISSIONS: Readonly<Record<string, ReadonlySet<Permission>>>
     Permission.PRODUCTION_EXECUTE,
     Permission.EQUIPMENT_MAINTAIN,
     Permission.RECIPE_MANAGE,
-    Permission.REPORTS_VIEW
+    Permission.REPORTS_VIEW,
+    Permission.HOLD_ACKNOWLEDGE
   ]),
 
   SUPERVISOR: new Set([
     Permission.PRODUCTION_EXECUTE,
     Permission.EQUIPMENT_MAINTAIN,
     Permission.RECIPE_MANAGE,
-    Permission.REPORTS_VIEW
+    Permission.REPORTS_VIEW,
+    Permission.HOLD_ACKNOWLEDGE
   ]),
 
   QUALITY_INSPECTOR: new Set([
     Permission.QUALITY_APPROVE,
     Permission.COMPLIANCE_SIGN,
-    Permission.REPORTS_VIEW
+    Permission.REPORTS_VIEW,
+    Permission.HOLD_ACKNOWLEDGE
   ]),
 
   QA_DIRECTOR: new Set([
     Permission.QUALITY_APPROVE,
     Permission.COMPLIANCE_SIGN,
-    Permission.REPORTS_VIEW
+    Permission.REPORTS_VIEW,
+    Permission.HOLD_ACKNOWLEDGE
   ]),
 
   PROCESS_ENGINEER: new Set([
@@ -103,12 +110,12 @@ export const ROLE_PERMISSIONS: Readonly<Record<string, ReadonlySet<Permission>>>
 /**
  * Checks if a given role possesses a specific permission.
  * Enforces hard non-delegable Segregation of Duties:
- * SYSTEM_ADMIN must NEVER have QUALITY_APPROVE.
+ * SYSTEM_ADMIN must NEVER have QUALITY_APPROVE or HOLD_ACKNOWLEDGE.
  */
 export function hasPermission(role: string, permission: Permission): boolean {
   // CRITICAL INVARIANT: Non-delegable Segregation of Duties (SoD)
-  // SYSTEM_ADMIN must NEVER have QUALITY_APPROVE.
-  if (role === 'SYSTEM_ADMIN' && permission === Permission.QUALITY_APPROVE) {
+  // SYSTEM_ADMIN must NEVER have QUALITY_APPROVE or HOLD_ACKNOWLEDGE.
+  if (role === 'SYSTEM_ADMIN' && (permission === Permission.QUALITY_APPROVE || permission === Permission.HOLD_ACKNOWLEDGE)) {
     return false;
   }
 
@@ -122,7 +129,7 @@ export function hasPermission(role: string, permission: Permission): boolean {
 
 /**
  * Returns all permissions granted to a role, guaranteed to filter out
- * QUALITY_APPROVE if the role is SYSTEM_ADMIN.
+ * QUALITY_APPROVE and HOLD_ACKNOWLEDGE if the role is SYSTEM_ADMIN.
  */
 export function getPermissionsForRole(role: string): Set<Permission> {
   const perms = ROLE_PERMISSIONS[role];
@@ -133,6 +140,7 @@ export function getPermissionsForRole(role: string): Set<Permission> {
   const result = new Set<Permission>(perms);
   if (role === 'SYSTEM_ADMIN') {
     result.delete(Permission.QUALITY_APPROVE);
+    result.delete(Permission.HOLD_ACKNOWLEDGE);
   }
   return result;
 }

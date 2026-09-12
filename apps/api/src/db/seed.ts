@@ -59,6 +59,7 @@ export async function seedDatabase(): Promise<void> {
     DELETE FROM shifts;
     DELETE FROM equipment_units;
     DELETE FROM work_centers;
+    DELETE FROM production_line_holds;
     DELETE FROM production_lines;
     DELETE FROM areas;
     DELETE FROM sites;
@@ -88,10 +89,10 @@ export async function seedDatabase(): Promise<void> {
 
   // 4. Production Lines
   await db.execute(`
-    INSERT INTO production_lines (id, area_id, code, name)
+    INSERT INTO production_lines (id, area_id, code, name, status)
     VALUES
-      ('line-smt-01', 'area-smt-01', 'LINE-SMT-01', 'SMT Line 01 (Fuji NXT III High-Speed Line)'),
-      ('line-smt-02', 'area-smt-01', 'LINE-SMT-02', 'SMT Line 02 (Automotive ECU High-Reliability Line)')
+      ('line-smt-01', 'area-smt-01', 'LINE-SMT-01', 'SMT Line 01 (Fuji NXT III High-Speed Line)', 'RUNNING'),
+      ('line-smt-02', 'area-smt-01', 'LINE-SMT-02', 'SMT Line 02 (Automotive ECU High-Reliability Line)', 'RUNNING')
   `);
 
   // 5. SMT Work Centers

@@ -12,6 +12,7 @@ import { getDatabase } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { IpFirewall } from '../security/ip-firewall';
 import { SecretsConfigManager } from '../config/secrets';
+import { ProductionHoldService } from '../services/production-hold.service';
 
 import {
   IControllableEquipmentAdapter,
@@ -20,6 +21,13 @@ import {
   MachineParameterCommand,
   MachineActionCommand
 } from './equipment-adapter.interface';
+
+export interface FujiMachineMapping {
+  machineId: string;
+  workCenterId: string;
+  lineId: string;
+  ipAddress?: string;
+}
 
 /**
  * Production Fuji Nexim TCP Socket Gateway.
@@ -63,6 +71,79 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
   public static readonly IDLE_TIMEOUT_MS: number = 30000; // 30-second socket timeout to prevent hung connections
   private customIdleTimeoutMs: number = FujiNeximAdapter.IDLE_TIMEOUT_MS;
   private customAllowedSubnets: string[] | null = null;
+  private machineRegistry: Map<string, FujiMachineMapping> = new Map();
+
+  constructor() {
+    // Pre-register standard SMT lines
+    this.registerMachineMapping({
+      machineId: 'NXT01',
+      workCenterId: 'wc-nxt-01',
+      lineId: 'line-smt-01',
+      ipAddress: '192.168.10.42'
+    });
+    this.registerMachineMapping({
+      machineId: 'NXT02',
+      workCenterId: 'wc-nxt-02',
+      lineId: 'line-smt-02',
+      ipAddress: '192.168.10.43'
+    });
+  }
+
+  public registerMachineMapping(mapping: FujiMachineMapping): void {
+    const key = mapping.machineId.toUpperCase();
+    this.machineRegistry.set(key, mapping);
+    if (mapping.workCenterId) {
+      this.machineRegistry.set(mapping.workCenterId.toLowerCase(), mapping);
+    }
+    if (mapping.ipAddress) {
+      const cleanIp = mapping.ipAddress.replace(/^::ffff:/, '');
+      this.machineRegistry.set(cleanIp, mapping);
+    }
+  }
+
+  public getRegisteredMachines(): FujiMachineMapping[] {
+    const unique = new Map<string, FujiMachineMapping>();
+    for (const mapping of this.machineRegistry.values()) {
+      unique.set(mapping.machineId, mapping);
+    }
+    return Array.from(unique.values());
+  }
+
+  public resolveMachineContext(clientIp: string, machineName?: string): FujiMachineMapping {
+    const cleanIp = clientIp.replace(/^::ffff:/, '');
+
+    if (machineName) {
+      const key = machineName.toUpperCase();
+      if (this.machineRegistry.has(key)) {
+        return this.machineRegistry.get(key)!;
+      }
+      const lowerKey = machineName.toLowerCase();
+      if (this.machineRegistry.has(lowerKey)) {
+        return this.machineRegistry.get(lowerKey)!;
+      }
+    }
+
+    if (this.machineRegistry.has(cleanIp)) {
+      return this.machineRegistry.get(cleanIp)!;
+    }
+
+    // Dynamic resolution based on machine identifier pattern
+    if (machineName && (machineName.includes('02') || machineName.includes('2'))) {
+      return {
+        machineId: machineName,
+        workCenterId: 'wc-nxt-02',
+        lineId: 'line-smt-02',
+        ipAddress: cleanIp
+      };
+    }
+
+    return {
+      machineId: machineName || 'NXT01',
+      workCenterId: this.workCenterId,
+      lineId: 'line-smt-01',
+      ipAddress: cleanIp
+    };
+  }
 
   public setAllowedSubnets(subnets: string[] | null): void {
     this.customAllowedSubnets = subnets;
@@ -442,17 +523,32 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
       return;
     }
 
-    // Handle Protocol Start Handshake
+    const fields = this.parseCommandTokens(parsed.command, parsed.tokens);
+    const resolved = this.resolveMachineContext(
+      socket.remoteAddress || '127.0.0.1',
+      fields.machineName || parsed.tokens[2] || (parsed.tokens.length > 4 ? parsed.tokens[4] : undefined)
+    );
+    const effectiveWorkCenterId = resolved.workCenterId;
+
+    // Handle Protocol Start Handshake (Dynamically reply with resolved machine ID)
     if (parsed.command === 'SETEV') {
-      socket.write(this.buildAckFrame('SETEV', parsed.seqId, true, ['NXT01']));
+      const ackMachine = parsed.tokens[2] || resolved.machineId;
+      socket.write(this.buildAckFrame('SETEV', parsed.seqId, true, [ackMachine]));
       return;
     }
     if (parsed.command === 'STARTEV') {
-      socket.write(this.buildAckFrame('STARTEV', parsed.seqId, true, ['NXT01']));
+      const ackMachine = parsed.tokens[2] || resolved.machineId;
+      socket.write(this.buildAckFrame('STARTEV', parsed.seqId, true, [ackMachine]));
       return;
     }
 
-    const fields = this.parseCommandTokens(parsed.command, parsed.tokens);
+    // Interlock: Check if production line or work center is currently under active hold
+    const isHold = this.isProductionHold || await ProductionHoldService.isHoldActive(resolved.lineId);
+    if (isHold && (parsed.command === 'PRODSTARTED' || parsed.command === 'LOADCOMP' || parsed.command === 'LOADCOMPIV' || parsed.command === 'CHANGECOMP' || parsed.command === 'CHANGECOMPII')) {
+      console.warn(`[Fuji Gateway] PRODUCTION HOLD ACTIVE on ${resolved.lineId} (${effectiveWorkCenterId}). Rejecting ${parsed.command}!`);
+      socket.write(this.buildAckFrame(parsed.command, parsed.seqId, false, ['HOLD_ACTIVE']));
+      return;
+    }
 
     // Splicing & Part Load Interlock (Unified SplicingAuthorizationService Gate)
     if (parsed.command === 'LOADCOMP' || parsed.command === 'LOADCOMPIV' || parsed.command === 'CHANGECOMP' || parsed.command === 'CHANGECOMPII') {
@@ -461,7 +557,7 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
       const newReelId = fields.newReelId || parsed.tokens[12] || parsed.tokens[10] || undefined;
 
       const decision = await SplicingAuthorizationService.authorizeSplicing({
-        workCenterId,
+        workCenterId: effectiveWorkCenterId,
         slotNo,
         scannedPartNumber: partNo,
         scannedReelId: newReelId
@@ -475,7 +571,7 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
     }
 
     // Project Canonical Event
-    const canonical = this.toCanonicalEvent(parsed.command, parsed.seqId, fields, workCenterId);
+    const canonical = this.toCanonicalEvent(parsed.command, parsed.seqId, fields, effectiveWorkCenterId);
     if (canonical) {
       canonical.ingressEventId = ingressId;
       await EventIngestionService.ingest(canonical);
@@ -632,33 +728,54 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
   private isProductionHold: boolean = false;
   private productionHoldReason: string | null = null;
 
-  public async tripProductionHold(reason: string): Promise<void> {
+  public async tripProductionHold(reason: string, targetLineId?: string, targetWorkCenterId?: string): Promise<void> {
     this.isProductionHold = true;
     this.productionHoldReason = reason;
-    console.warn(`[Fuji Gateway] PRODUCTION HOLD TRIPPED for ${this.workCenterId}: ${reason}`);
+    const workCenter = targetWorkCenterId || this.workCenterId;
+    console.warn(`[Fuji Gateway] PRODUCTION HOLD TRIPPED for ${workCenter}: ${reason}`);
     try {
-      const db = getDatabase();
-      await db.execute(
-        `UPDATE work_centers SET current_state = 'QUALITY_HOLD', last_state_change_time = ? WHERE id = ?`,
-        [new Date().toISOString(), this.workCenterId]
-      );
+      await ProductionHoldService.tripProductionHold({
+        lineId: targetLineId,
+        workCenterId: workCenter,
+        reason
+      });
     } catch (err: any) {
-      console.error(`[Fuji Gateway] Failed to update work center hold state:`, err.message);
+      console.error(`[Fuji Gateway] Failed to trip production hold in service:`, err.message);
+      // Fallback local update
+      try {
+        const db = getDatabase();
+        await db.execute(
+          `UPDATE work_centers SET current_state = 'QUALITY_HOLD', last_state_change_time = ? WHERE id = ?`,
+          [new Date().toISOString(), workCenter]
+        );
+      } catch (dbErr: any) {
+        console.error(`[Fuji Gateway] DB fallback failed:`, dbErr.message);
+      }
     }
   }
 
-  public async clearProductionHold(): Promise<void> {
+  public async clearProductionHold(acknowledgedBy = 'LINE_LEAD_01', reason = 'Supervisor acknowledged hold clear'): Promise<void> {
     this.isProductionHold = false;
     this.productionHoldReason = null;
     console.log(`[Fuji Gateway] Production hold CLEARED for ${this.workCenterId}`);
     try {
-      const db = getDatabase();
-      await db.execute(
-        `UPDATE work_centers SET current_state = 'RUNNING', last_state_change_time = ? WHERE id = ?`,
-        [new Date().toISOString(), this.workCenterId]
-      );
+      await ProductionHoldService.acknowledgeProductionHold({
+        workCenterId: this.workCenterId,
+        acknowledgedBy,
+        role: 'LINE_LEAD',
+        acknowledgementReason: reason
+      });
     } catch (err: any) {
-      console.error(`[Fuji Gateway] Failed to clear work center hold state:`, err.message);
+      // Fallback local update
+      try {
+        const db = getDatabase();
+        await db.execute(
+          `UPDATE work_centers SET current_state = 'RUNNING', last_state_change_time = ? WHERE id = ?`,
+          [new Date().toISOString(), this.workCenterId]
+        );
+      } catch (dbErr: any) {
+        console.error(`[Fuji Gateway] DB fallback failed:`, dbErr.message);
+      }
     }
   }
 

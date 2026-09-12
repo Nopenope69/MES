@@ -36,8 +36,28 @@ CREATE TABLE IF NOT EXISTS production_lines (
   id VARCHAR(64) PRIMARY KEY,
   area_id VARCHAR(64) NOT NULL,
   code VARCHAR(64) UNIQUE NOT NULL,
-  name VARCHAR(128) NOT NULL
+  name VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'RUNNING' -- 'RUNNING' | 'HOLD_ACTIVE'
 );
+
+CREATE TABLE IF NOT EXISTS production_line_holds (
+  id VARCHAR(64) PRIMARY KEY,
+  line_id VARCHAR(64) NOT NULL,
+  work_center_id VARCHAR(64),
+  status VARCHAR(32) NOT NULL DEFAULT 'HOLD_ACTIVE', -- 'HOLD_ACTIVE' | 'ACKNOWLEDGED' | 'CLEARED'
+  reason VARCHAR(512) NOT NULL,
+  trigger_defect_json TEXT,
+  tripped_at TIMESTAMP NOT NULL,
+  acknowledged_at TIMESTAMP,
+  acknowledged_by VARCHAR(64),
+  acknowledged_by_name VARCHAR(128),
+  acknowledged_role VARCHAR(64),
+  acknowledgement_reason TEXT,
+  digital_signature VARCHAR(128)
+);
+
+CREATE INDEX IF NOT EXISTS idx_line_holds_line ON production_line_holds(line_id);
+CREATE INDEX IF NOT EXISTS idx_line_holds_status ON production_line_holds(status);
 
 CREATE TABLE IF NOT EXISTS work_centers (
   id VARCHAR(64) PRIMARY KEY,

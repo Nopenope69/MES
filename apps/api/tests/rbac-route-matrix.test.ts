@@ -157,7 +157,8 @@ describe('Complete RBAC Route Matrix & Launch Gate G-04 Enforcement', () => {
       { method: 'POST', path: '/api/v1/reflow/profiles/run-prf-20260908-01/approve' },
       { method: 'POST', path: '/api/v1/reflow/profiles/run-prf-20260908-01/reject' },
       { method: 'POST', path: '/api/v1/smt/paste/authorize' },
-      { method: 'POST', path: '/api/v1/predictive/actions/act-test-01/authorize' }
+      { method: 'POST', path: '/api/v1/predictive/actions/act-test-01/authorize' },
+      { method: 'POST', path: '/api/v1/smt/hold/acknowledge' }
     ];
 
     it('asserts SYSTEM_ADMIN receives 403 on ALL QUALITY_APPROVE routes (SoD enforcement)', async () => {

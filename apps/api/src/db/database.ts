@@ -332,7 +332,20 @@ export async function initDatabase(): Promise<void> {
 
   await db.execScript(schemaSql);
 
-  // If connected to PostgreSQL, execute the enterprise migration chain (001-006)
+  // In SQLite, verify schema parity for columns added in forward migrations
+  try {
+    const tableInfo = await db.query<{ name: string }>('PRAGMA table_info(production_lines)');
+    if (tableInfo && tableInfo.length > 0) {
+      const hasStatus = tableInfo.some((col: any) => col.name === 'status');
+      if (!hasStatus) {
+        await db.execute("ALTER TABLE production_lines ADD COLUMN status VARCHAR(32) DEFAULT 'RUNNING'");
+      }
+    }
+  } catch (err: any) {
+    // Ignore if not supported (e.g. Postgres)
+  }
+
+  // If connected to PostgreSQL, execute the enterprise migration chain (001-007)
   const isPostgres = Boolean(process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('postgres://') || process.env.DATABASE_URL.startsWith('postgresql://')));
   if (isPostgres) {
     const migrationsDir = path.resolve(__dirname, 'migrations');

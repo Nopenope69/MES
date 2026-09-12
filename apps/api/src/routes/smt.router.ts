@@ -7,6 +7,7 @@ import { SolderPasteService } from '../services/solder-paste.service';
 import { PrinterAuthorizationService } from '../services/printer-authorization.service';
 import { requirePermission } from '../middleware/auth.middleware';
 import { Permission } from '../security/permissions';
+import { ProductionHoldService, HoldBroadcaster } from '../services/production-hold.service';
 
 export const smtRouter = Router();
 
@@ -398,5 +399,93 @@ smtRouter.post('/projections/replay', requirePermission(Permission.SYSTEM_MANAGE
     res.status(500).json({ error: error.message });
   }
 });
+
+// ============================================================================
+// Mandatory Supervisor Acknowledgment (MSA) Production Hold Endpoints (Task I-03 / Gate G-10)
+// ============================================================================
+
+// Get active production holds
+smtRouter.get('/hold/status', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
+  try {
+    const { lineId } = req.query;
+    if (lineId && typeof lineId === 'string') {
+      const activeHold = await ProductionHoldService.getActiveHoldForLine(lineId);
+      res.json({ isHoldActive: activeHold !== null, hold: activeHold });
+      return;
+    }
+    const activeHolds = await ProductionHoldService.getActiveHolds();
+    res.json({ count: activeHolds.length, holds: activeHolds });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Trip production line hold
+smtRouter.post('/hold/trip', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
+  try {
+    const { lineId, workCenterId, reason, triggerDefect } = req.body;
+    if (!reason || typeof reason !== 'string') {
+      res.status(400).json({ error: 'Hold reason is mandatory.' });
+      return;
+    }
+    const hold = await ProductionHoldService.tripProductionHold({
+      lineId,
+      workCenterId,
+      reason,
+      triggerDefect
+    });
+    res.status(201).json({ success: true, message: `Production line hold tripped: ${reason}`, data: hold });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Mandatory Supervisor Acknowledgment to clear hold
+smtRouter.post('/hold/acknowledge', requirePermission(Permission.HOLD_ACKNOWLEDGE), async (req: Request, res: Response) => {
+  try {
+    const { holdId, lineId, acknowledgementReason, digitalSignature } = req.body;
+    if (!acknowledgementReason || typeof acknowledgementReason !== 'string' || acknowledgementReason.trim().length === 0) {
+      res.status(400).json({ error: 'Acknowledgement reason is mandatory.' });
+      return;
+    }
+
+    const acknowledgedBy = req.user?.code || req.user?.id || 'SUPERVISOR';
+    const acknowledgedByName = req.user?.name || req.user?.code || 'Supervisor';
+    const role = req.user?.role || 'LINE_LEAD';
+
+    const hold = await ProductionHoldService.acknowledgeProductionHold({
+      holdId,
+      lineId,
+      acknowledgedBy,
+      acknowledgedByName,
+      role,
+      acknowledgementReason,
+      digitalSignature
+    });
+
+    res.json({ success: true, message: `Production line hold cleared by ${acknowledgedBy} (${role})`, data: hold });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Real-time SSE stream for cleanroom station cockpits
+smtRouter.get('/hold/events', requirePermission(Permission.REPORTS_VIEW), (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  res.write(`data: ${JSON.stringify({ type: 'CONNECTED', timestamp: new Date().toISOString() })}\n\n`);
+
+  const unsubscribe = HoldBroadcaster.getInstance().subscribe((event) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  });
+
+  req.on('close', () => {
+    unsubscribe();
+  });
+});
+
 
 

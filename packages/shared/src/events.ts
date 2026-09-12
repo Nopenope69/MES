@@ -81,7 +81,10 @@ export const CanonicalEventTypeEnum = z.enum([
   'REFLOW_INTERLOCK_REQUESTED',
   'REFLOW_INTERLOCK_CONFIRMED',
   'REFLOW_INTERLOCK_FAILED',
-  'REFLOW_REVALIDATION_REQUESTED'
+  'REFLOW_REVALIDATION_REQUESTED',
+  // Equipment / Line Hold & Mandatory Supervisor Acknowledgment (Gate G-10 / Task I-03)
+  'PRODUCTION_HOLD_TRIPPED',
+  'PRODUCTION_HOLD_ACKNOWLEDGED'
 ]);
 export type CanonicalEventType = z.infer<typeof CanonicalEventTypeEnum>;
 export type MesEventType = CanonicalEventType;
@@ -103,7 +106,8 @@ export const SourceTypeEnum = z.enum([
   'LOGISTICS_MANAGER',
   'PREDICTIVE_ENGINE',
   'PROFILER_GATEWAY',
-  'REFLOW_CONTROLLER'
+  'REFLOW_CONTROLLER',
+  'SUPERVISOR_ACTION'
 ]);
 export type SourceType = z.infer<typeof SourceTypeEnum>;
 
