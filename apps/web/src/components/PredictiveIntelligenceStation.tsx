@@ -127,7 +127,7 @@ export const PredictiveIntelligenceStation: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          authorizedBy: 'qa-lead-meera',
+          authorizedBy: 'qa-lead-alpha',
           policy: 'POLICY_AUTO'
         })
       });

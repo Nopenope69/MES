@@ -18,7 +18,7 @@ import { MockCfxAmqpBroker } from './mock-cfx-amqp-broker';
 export class CfxAmqpAdapter {
   private broker: MockCfxAmqpBroker;
   private isConnected: boolean = false;
-  private sourceUri: string = 'cfx:mes-quality-engine@dixon-p4';
+  private sourceUri: string = 'cfx:mes-quality-engine@apex-p4';
 
   constructor(broker?: MockCfxAmqpBroker) {
     this.broker = broker || MockCfxAmqpBroker.getInstance();

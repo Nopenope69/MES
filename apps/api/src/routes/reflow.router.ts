@@ -11,7 +11,7 @@ const reflowModule = ReflowProfilingModule.getInstance();
  * Imports a physical thermocouple profile run file (KIC, Datapaq, M.O.L.E., CSV).
  * Accepts JSON payload with fileContent (string or base64) or buffer.
  */
-reflowRouter.post('/profiles/import', async (req: Request, res: Response) => {
+reflowRouter.post('/profiles/import', requirePermission(Permission.EQUIPMENT_MAINTAIN), async (req: Request, res: Response) => {
   try {
     const {
       fileName,
@@ -21,9 +21,9 @@ reflowRouter.post('/profiles/import', async (req: Request, res: Response) => {
       equipmentId,
       recipeId,
       boardPartNumber,
-      boardRevision,
-      importedBy
+      boardRevision
     } = req.body;
+    const importedBy = req.user?.code || req.user?.id || req.body.importedBy || 'OPERATOR-SMT';
 
     if (!fileName) {
       return res.status(400).json({ success: false, error: 'fileName is required' });
@@ -58,7 +58,7 @@ reflowRouter.post('/profiles/import', async (req: Request, res: Response) => {
       recipeId,
       boardPartNumber,
       boardRevision,
-      importedBy: importedBy || 'OPERATOR-SMT'
+      importedBy
     });
 
     res.status(201).json({ success: true, data: result });
@@ -71,7 +71,7 @@ reflowRouter.post('/profiles/import', async (req: Request, res: Response) => {
  * GET /api/v1/reflow/profiles/active
  * Resolves current active profile baseline for an applicability scope.
  */
-reflowRouter.get('/profiles/active', async (req: Request, res: Response) => {
+reflowRouter.get('/profiles/active', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const lineId = req.query.lineId as string;
     const equipmentId = req.query.equipmentId as string;
@@ -110,7 +110,7 @@ reflowRouter.get('/profiles/active', async (req: Request, res: Response) => {
  * GET /api/v1/reflow/profiles/:id
  * Fetches profile run and probes by ID.
  */
-reflowRouter.get('/profiles/:id', async (req: Request, res: Response) => {
+reflowRouter.get('/profiles/:id', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const includeProbes = req.query.includeProbes !== 'false';
@@ -138,7 +138,7 @@ reflowRouter.post(
       const id = String(req.params.id);
       const { approvedBy, electronicSignature, comments } = req.body;
 
-      const effectiveApprover = approvedBy || req.user?.code || 'QA-INSPECTOR';
+      const effectiveApprover = req.user?.code || req.user?.id || approvedBy || 'QA-INSPECTOR';
 
       const run = await reflowModule.approveProfileRun({
         runId: id,
@@ -164,10 +164,11 @@ reflowRouter.post(
   async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { rejectedBy, reason } = req.body;
+    const rejectedBy = req.user?.code || req.user?.id || req.body.rejectedBy || 'QA-INSPECTOR';
+    const reason = req.body.reason;
 
-    if (!rejectedBy || !reason) {
-      return res.status(400).json({ success: false, error: 'rejectedBy and reason are required' });
+    if (!reason) {
+      return res.status(400).json({ success: false, error: 'reason is required' });
     }
 
     const run = await reflowModule.rejectProfileRun({
@@ -186,10 +187,10 @@ reflowRouter.post(
  * POST /api/v1/reflow/profiles/:id/activate
  * Activates profile run as current production baseline (PWI-FAIL guarded).
  */
-reflowRouter.post('/profiles/:id/activate', async (req: Request, res: Response) => {
+reflowRouter.post('/profiles/:id/activate', requirePermission(Permission.RECIPE_MANAGE), async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { activatedBy } = req.body;
+    const activatedBy = req.user?.code || req.user?.id || req.body.activatedBy;
 
     if (!activatedBy) {
       return res.status(400).json({ success: false, error: 'activatedBy is required' });
@@ -210,7 +211,7 @@ reflowRouter.post('/profiles/:id/activate', async (req: Request, res: Response) 
  * GET /api/v1/reflow/process-state/:lineId/:equipmentId
  * Gets active process compliance state snapshot.
  */
-reflowRouter.get('/process-state/:lineId/:equipmentId', async (req: Request, res: Response) => {
+reflowRouter.get('/process-state/:lineId/:equipmentId', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const lineId = String(req.params.lineId);
     const equipmentId = String(req.params.equipmentId);
@@ -243,7 +244,7 @@ reflowRouter.get('/process-state/:lineId/:equipmentId', async (req: Request, res
  * POST /api/v1/reflow/drift/evaluate
  * Evaluates live continuous oven telemetry drift.
  */
-reflowRouter.post('/drift/evaluate', async (req: Request, res: Response) => {
+reflowRouter.post('/drift/evaluate', requirePermission(Permission.EQUIPMENT_MAINTAIN), async (req: Request, res: Response) => {
   try {
     const {
       lineId,
@@ -282,7 +283,7 @@ reflowRouter.post('/drift/evaluate', async (req: Request, res: Response) => {
  * GET /api/v1/reflow/specifications/:recipeId
  * Scoped query: GET /api/v1/reflow/specifications/:recipeId?boardPartNumber=...&boardRevision=...&version=...
  */
-reflowRouter.get('/specifications/:recipeId', async (req: Request, res: Response) => {
+reflowRouter.get('/specifications/:recipeId', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const recipeId = String(req.params.recipeId);
     const boardPartNumber = req.query.boardPartNumber as string;

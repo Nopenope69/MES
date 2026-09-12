@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { getDatabase } from '../db/database';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const workCentersRouter = Router();
 
 // List all work centers with current state, active batch, and active operator
-workCentersRouter.get('/', async (_req: Request, res: Response) => {
+workCentersRouter.get('/', requirePermission(Permission.REPORTS_VIEW), async (_req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const rows = await db.query(`
@@ -38,7 +40,7 @@ workCentersRouter.get('/', async (_req: Request, res: Response) => {
 });
 
 // Get state slice history timeline for a work center
-workCentersRouter.get('/:id/timeline', async (req: Request, res: Response) => {
+workCentersRouter.get('/:id/timeline', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const { id } = req.params;

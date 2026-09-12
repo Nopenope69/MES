@@ -13,10 +13,13 @@ export enum Permission {
 
 export type Role =
   | 'OPERATOR'
+  | 'MAINTENANCE'
+  | 'QUALITY_LEAD'
+  | 'LINE_LEAD'
+  | 'SYSTEM_ADMIN'
   | 'SMT_SUPERVISOR'
   | 'QUALITY_INSPECTOR'
   | 'PROCESS_ENGINEER'
-  | 'SYSTEM_ADMIN'
   | 'SUPERVISOR'
   | 'QA_DIRECTOR';
 
@@ -26,12 +29,52 @@ export type Role =
  * barred from quality approvals.
  */
 export const ROLE_PERMISSIONS: Readonly<Record<string, ReadonlySet<Permission>>> = {
+  // Canonical 5 Roles
   OPERATOR: new Set([
     Permission.PRODUCTION_EXECUTE,
+    Permission.COMPLIANCE_SIGN,
     Permission.REPORTS_VIEW
   ]),
 
+  MAINTENANCE: new Set([
+    Permission.EQUIPMENT_MAINTAIN,
+    Permission.COMPLIANCE_SIGN,
+    Permission.REPORTS_VIEW
+  ]),
+
+  QUALITY_LEAD: new Set([
+    Permission.QUALITY_APPROVE,
+    Permission.COMPLIANCE_SIGN,
+    Permission.REPORTS_VIEW
+  ]),
+
+  LINE_LEAD: new Set([
+    Permission.PRODUCTION_EXECUTE,
+    Permission.EQUIPMENT_MAINTAIN,
+    Permission.RECIPE_MANAGE,
+    Permission.COMPLIANCE_SIGN,
+    Permission.REPORTS_VIEW
+  ]),
+
+  SYSTEM_ADMIN: new Set([
+    Permission.SYSTEM_MANAGE,
+    Permission.SECURITY_ADMIN,
+    Permission.REPORTS_VIEW,
+    Permission.PRODUCTION_EXECUTE,
+    Permission.EQUIPMENT_MAINTAIN,
+    Permission.RECIPE_MANAGE,
+    Permission.COMPLIANCE_SIGN
+  ]),
+
+  // Aliases for backwards compatibility with existing fixtures/context
   SMT_SUPERVISOR: new Set([
+    Permission.PRODUCTION_EXECUTE,
+    Permission.EQUIPMENT_MAINTAIN,
+    Permission.RECIPE_MANAGE,
+    Permission.REPORTS_VIEW
+  ]),
+
+  SUPERVISOR: new Set([
     Permission.PRODUCTION_EXECUTE,
     Permission.EQUIPMENT_MAINTAIN,
     Permission.RECIPE_MANAGE,
@@ -44,29 +87,15 @@ export const ROLE_PERMISSIONS: Readonly<Record<string, ReadonlySet<Permission>>>
     Permission.REPORTS_VIEW
   ]),
 
-  PROCESS_ENGINEER: new Set([
-    Permission.RECIPE_MANAGE,
-    Permission.EQUIPMENT_MAINTAIN,
-    Permission.REPORTS_VIEW
-  ]),
-
-  SYSTEM_ADMIN: new Set([
-    Permission.SYSTEM_MANAGE,
-    Permission.SECURITY_ADMIN,
-    Permission.REPORTS_VIEW
-  ]),
-
-  // Aliases for backwards compatibility with existing fixtures/context
-  SUPERVISOR: new Set([
-    Permission.PRODUCTION_EXECUTE,
-    Permission.EQUIPMENT_MAINTAIN,
-    Permission.RECIPE_MANAGE,
-    Permission.REPORTS_VIEW
-  ]),
-
   QA_DIRECTOR: new Set([
     Permission.QUALITY_APPROVE,
     Permission.COMPLIANCE_SIGN,
+    Permission.REPORTS_VIEW
+  ]),
+
+  PROCESS_ENGINEER: new Set([
+    Permission.RECIPE_MANAGE,
+    Permission.EQUIPMENT_MAINTAIN,
     Permission.REPORTS_VIEW
   ])
 };

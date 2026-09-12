@@ -22,9 +22,9 @@ describe('Traceability & Genealogy Module — Unit-Level As-Built Engine', () =>
     qaToken = TokenManager.generateAccessToken({
       sub: 'OP-QA-01',
       code: 'QA-SMT-01',
-      name: 'Ananya Sharma',
+      name: 'Quality Lead Alpha',
       role: 'QUALITY_INSPECTOR',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });

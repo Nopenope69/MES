@@ -68,6 +68,21 @@ export class SimpleRateLimiter {
   }
 }
 
+import crypto from 'node:crypto';
+
+/**
+ * Constant-time string comparison to prevent timing attack side channels.
+ */
+export function timingSafeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) {
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 /**
  * Authentication middleware for privileged regulatory and SRE endpoints.
  * Validates 'X-API-Key' or 'Authorization: Bearer <key>'.
@@ -85,7 +100,7 @@ export function apiKeyAuth(req: Request, res: Response, next: NextFunction): voi
     }
   }
 
-  if (!token || token !== config.apiKeySecret) {
+  if (!token || !timingSafeCompare(token, config.apiKeySecret)) {
     res.status(401).json({
       error: 'UNAUTHORIZED',
       message: 'Valid X-API-Key or Bearer token is required for privileged operations.'
@@ -95,3 +110,4 @@ export function apiKeyAuth(req: Request, res: Response, next: NextFunction): voi
 
   next();
 }
+

@@ -21,9 +21,9 @@ describe('Track B: Compliance & Industrial Audit Readiness Suite (21 CFR Part 11
     qaToken = TokenManager.generateAccessToken({
       sub: 'qa-smt-01',
       code: 'QA-SMT-01',
-      name: 'Meera Rao',
+      name: 'Quality Lead Alpha',
       role: 'QUALITY_INSPECTOR',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });

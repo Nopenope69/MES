@@ -21,7 +21,7 @@ describe('EventStoreModule: Declarative Event Spine Suite', () => {
       sourceId: 'fuji-nxt01',
       payload: {
         batchNumber: `JOB-ES-${Date.now()}`,
-        workOrderNumber: 'WO-2026-DIXON-01',
+        workOrderNumber: 'WO-2026-APEX-01',
         productCode: 'PRD-SM-4G-V2',
         recipeCode: 'PROG-SM-METER-TOP-REV4',
         recipeRevision: 4,

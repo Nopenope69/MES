@@ -108,7 +108,7 @@ export class ComplianceLedgerService {
 
     const reason = metaObj.reason || meaning;
     const entityRevision = metaObj.entityRevision || 1;
-    const organizationId = metaObj.organizationId || 'org-dixon';
+    const organizationId = metaObj.organizationId || 'org-apex';
     const siteId = metaObj.siteId || 'site-noida-p4';
     const metadata = metaObj.metadata !== undefined ? metaObj.metadata : metaObj;
 
@@ -175,7 +175,7 @@ export class ComplianceLedgerService {
         context.scope?.organizationId ||
         (context.principal as any).organizationId ||
         (context.principal as any).scope?.organizationId ||
-        'org-dixon';
+        'org-apex';
       siteId =
         context.scope?.siteId ||
         (context.principal as any).siteId ||
@@ -207,7 +207,7 @@ export class ComplianceLedgerService {
       // Legacy backwards-compatibility for direct service callers (e.g. EdhrService or legacy tests)
       actorId = input.actorId || 'SYSTEM';
       actorRole = input.actorRole || 'SYSTEM_AUDITOR';
-      organizationId = input.organizationId || 'org-dixon';
+      organizationId = input.organizationId || 'org-apex';
       siteId = input.siteId || 'site-noida-p4';
     }
 
@@ -360,7 +360,7 @@ export class ComplianceLedgerService {
 
       const reason = metaObj.reason !== undefined ? metaObj.reason : (metaObj._reason || row.meaning);
       const entityRevision = metaObj.entityRevision !== undefined ? Number(metaObj.entityRevision) : 1;
-      const organizationId = metaObj.organizationId || metaObj._organizationId || 'org-dixon';
+      const organizationId = metaObj.organizationId || metaObj._organizationId || 'org-apex';
       const siteId = metaObj.siteId || metaObj._siteId || 'site-noida-p4';
       const metadata = metaObj.metadata !== undefined ? metaObj.metadata : metaObj;
 
@@ -479,7 +479,7 @@ export class ComplianceLedgerService {
 
       const reason = metaObj.reason !== undefined ? metaObj.reason : (metaObj._reason || r.meaning);
       const entityRevision = metaObj.entityRevision !== undefined ? Number(metaObj.entityRevision) : 1;
-      const organizationId = metaObj.organizationId || metaObj._organizationId || 'org-dixon';
+      const organizationId = metaObj.organizationId || metaObj._organizationId || 'org-apex';
       const siteId = metaObj.siteId || metaObj._siteId || 'site-noida-p4';
       const metadata = metaObj.metadata !== undefined ? metaObj.metadata : metaObj;
 

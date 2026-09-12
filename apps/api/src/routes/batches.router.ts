@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { getDatabase } from '../db/database';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const batchesRouter = Router();
 
 // List all batches
-batchesRouter.get('/', async (req: Request, res: Response) => {
+batchesRouter.get('/', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const { status, workCenterId } = req.query;
@@ -37,7 +39,7 @@ batchesRouter.get('/', async (req: Request, res: Response) => {
 });
 
 // Get single batch with recipe BOM items and actual consumed materials
-batchesRouter.get('/:id', async (req: Request, res: Response) => {
+batchesRouter.get('/:id', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const { id } = req.params;

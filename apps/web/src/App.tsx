@@ -77,7 +77,7 @@ export const App: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[#7A8A9E]">
-                  DIXON TECH • NOIDA CLUSTER P4
+                  APEX ELECTRONICS • NOIDA CLUSTER P4
                 </span>
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00E699] animate-pulse" />
                 <span className="text-[10px] font-mono text-[#00E699] font-bold">

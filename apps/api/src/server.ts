@@ -30,18 +30,32 @@ import { authRouter } from './routes/auth.router';
 import { authenticateToken, requirePermission } from './middleware/auth.middleware';
 import { Permission } from './security/permissions';
 import { OnboardingService } from './services/onboarding.service';
+import { featureGate } from './middleware/feature-gate.middleware';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 4000;
-let fujiAdapter: FujiNeximAdapter | null = null;
 const metrics = MetricsService.getInstance();
 const spliceRateLimiter = new SimpleRateLimiter(60000, 100);
 
 // Enterprise Security Hardening Middleware
 app.use(securityHeadersMiddleware);
-app.use(cors());
+
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,https://cleanroom.local')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'test') {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS policy violation: Origin not allowed'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '20mb' }));
 app.use('/api/v1/smt/splice-verify', spliceRateLimiter.middleware());
 
@@ -95,12 +109,24 @@ app.use('/api/v1/reports', reportsRouter);
 app.use('/api/v1/genealogy', genealogyRouter);
 app.use('/api/v1/smt', smtRouter);
 app.use('/api/v1/compliance', complianceRouter);
+
+// Experimental Modules Parked Behind Feature Flags (X-01)
+app.use('/api/v1/sre/chaos', featureGate('ENABLE_CHAOS_ENGINEERING'));
 app.use('/api/v1/sre', sreRouter);
+
 app.use('/api/v1/aoi', aoiRouter);
+
+app.use('/api/v1/spi/printer/modify-parameter', featureGate('ENABLE_PRINTER_AUTO_TUNE'));
 app.use('/api/v1/spi', spiRouter);
+
 app.use('/api/v1/fleet', fleetRouter);
+
+app.use('/api/v1/logistics/agv', featureGate('ENABLE_AGV'));
 app.use('/api/v1/logistics', logisticsRouter);
+
+app.use('/api/v1/predictive', featureGate('ENABLE_PREDICTIVE_QUALITY'));
 app.use('/api/v1/predictive', predictiveRouter);
+
 app.use('/api/v1/reflow', reflowRouter);
 
 // Prometheus Metrics Endpoint

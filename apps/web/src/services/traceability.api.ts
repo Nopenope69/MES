@@ -1,10 +1,10 @@
-// apps/web/src/services/traceability.api.ts
 import {
   FIXTURE_PANEL_0042,
   FIXTURE_PANEL_CLEAN,
   FIXTURE_RECALL_REEL,
   FIXTURE_BATCH_SUMMARY
 } from '../fixtures/traceability.fixtures';
+import { authService } from './auth.service';
 
 export type TraceabilityDataSource =
   | 'LIVE'
@@ -23,10 +23,13 @@ export interface TraceabilityResponse<T> {
   fixtureVersion?: string;
 }
 
-// Global fixture mode state
-let fixtureModeEnabled = true;
+// Global fixture mode state - strictly disabled in production builds (Task U-02)
+let fixtureModeEnabled = false;
 
 export function isFixtureModeEnabled(): boolean {
+  if (import.meta.env?.PROD) {
+    return false;
+  }
   if (typeof window !== 'undefined') {
     const stored = window.localStorage.getItem('TRACEABILITY_FIXTURE_MODE');
     if (stored !== null) {
@@ -37,6 +40,10 @@ export function isFixtureModeEnabled(): boolean {
 }
 
 export function setFixtureModeEnabled(enabled: boolean): void {
+  if (import.meta.env?.PROD) {
+    fixtureModeEnabled = false;
+    return;
+  }
   fixtureModeEnabled = enabled;
   if (typeof window !== 'undefined') {
     window.localStorage.setItem('TRACEABILITY_FIXTURE_MODE', enabled ? 'true' : 'false');
@@ -46,22 +53,14 @@ export function setFixtureModeEnabled(enabled: boolean): void {
 /**
  * Get request headers incorporating bearer token or session credentials if present
  */
-function getRequestHeaders(): HeadersInit {
+function getRequestHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
   };
 
-  if (typeof window !== 'undefined') {
-    const token = window.localStorage.getItem('mes_access_token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    } else {
-      // In development cleanroom proxy, supply dev API key if stored or configured
-      const apiKey = window.localStorage.getItem('mes_api_key');
-      if (apiKey) {
-        headers['X-API-Key'] = apiKey;
-      }
-    }
+  const token = authService.getAccessToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   return headers;
@@ -77,7 +76,8 @@ async function fetchWithPolicy<T>(
 ): Promise<TraceabilityResponse<T>> {
   try {
     const res = await fetch(url, {
-      headers: getRequestHeaders()
+      headers: getRequestHeaders(),
+      credentials: 'include'
     });
 
     // Handle explicit HTTP status codes

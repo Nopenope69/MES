@@ -83,7 +83,7 @@ describe('Disaster Recovery Verification & Retention Suite (Task 8)', () => {
       reason: 'Low component level',
       entityType: 'REEL',
       entityId: 'reel-c1005-01',
-      organizationId: 'org-dixon',
+      organizationId: 'org-apex',
       siteId: 'site-noida-p4'
     });
 
@@ -95,7 +95,7 @@ describe('Disaster Recovery Verification & Retention Suite (Task 8)', () => {
       reason: 'PWI within acceptable window',
       entityType: 'BATCH',
       entityId: 'batch-mfg-101',
-      organizationId: 'org-dixon',
+      organizationId: 'org-apex',
       siteId: 'site-noida-p4'
     });
 
@@ -250,7 +250,7 @@ describe('Disaster Recovery Verification & Retention Suite (Task 8)', () => {
       reason: 'Setup',
       entityType: 'FEEDER',
       entityId: 'feeder-12',
-      organizationId: 'org-dixon',
+      organizationId: 'org-apex',
       siteId: 'site-noida-p4'
     });
 

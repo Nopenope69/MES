@@ -26,7 +26,7 @@ describe('Repo Diagnostics & Bug Verification Suite', () => {
         id, event_id, event_type, schema_version, event_time, received_time,
         source_type, source_id, site_id, work_center_id, payload_json
       ) VALUES (?, ?, 'AOI_INSPECTION_COMPLETED', '1.0.0', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
-        'OPTICAL_AOI', 'KY-ZENITH-01', 'site-dixon-01', 'wc-aoi-01', ?)
+        'OPTICAL_AOI', 'KY-ZENITH-01', 'site-noida-p4', 'wc-aoi-01', ?)
     `, [
       uuidv4(),
       testInspectionId,
@@ -143,7 +143,7 @@ describe('Repo Diagnostics & Bug Verification Suite', () => {
       receivedTime: new Date().toISOString(),
       sourceType: 'OPTICAL_AOI',
       sourceId: 'KY-ZENITH-01',
-      siteId: 'site-dixon-01',
+      siteId: 'site-noida-p4',
       workCenterId: 'wc-aoi-01',
       payload: {
         inspectionId: uuidv4(),

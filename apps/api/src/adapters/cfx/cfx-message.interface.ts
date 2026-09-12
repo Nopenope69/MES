@@ -8,8 +8,8 @@ export const CFX_VERSION = '1.7';
 export interface CfxMessageEnvelope<T = any> {
   cfxVersion: string; // "1.7"
   messageName: string; // e.g. "CFX.Production.TestAndInspection.UnitsInspected"
-  sourceUri: string; // e.g. "cfx:ky-aspire3-01@dixon-p4"
-  targetUri?: string; // e.g. "cfx:mes-core@dixon-p4"
+  sourceUri: string; // e.g. "cfx:ky-aspire3-01@apex-p4"
+  targetUri?: string; // e.g. "cfx:mes-core@apex-p4"
   timestamp: string;
   uniqueId: string;
   data: T;

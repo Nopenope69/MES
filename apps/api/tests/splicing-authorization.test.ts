@@ -20,9 +20,9 @@ describe('SplicingAuthorizationService (Unified Quality Gate Suite)', () => {
     operatorToken = TokenManager.generateAccessToken({
       sub: 'op-smt-01',
       code: 'OP-SMT-01',
-      name: 'Vikram Singh',
+      name: 'Operator Alpha',
       role: 'OPERATOR',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });

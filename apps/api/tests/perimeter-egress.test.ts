@@ -234,7 +234,7 @@ describe('Perimeter, SafeConnector & Egress Policy Suite (Task 6)', () => {
       // Provision successfully to PRODUCTION_ACTIVE
       const provisionResult = await OnboardingService.provision({
         organizationId: 'org-prod-ready',
-        organizationName: 'Dixon Production Line A',
+        organizationName: 'Apex Production Line A',
         siteId: 'site-noida-p4',
         siteName: 'Noida Phase 4 Plant',
         adminUsername: 'PROD_ADMIN_01',

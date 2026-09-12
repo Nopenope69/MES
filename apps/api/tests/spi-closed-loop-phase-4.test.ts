@@ -35,7 +35,7 @@ describe('Phase 4: Closed-Loop 3D SPI, Screen Printer IPC-CFX Auto-Tuning & Pre-
       const cfxPayload: CfxMessageEnvelope<CfxUnitsInspectedData> = {
         cfxVersion: '1.7',
         messageName: 'CFX.Production.TestAndInspection.UnitsInspected',
-        sourceUri: 'cfx:koh-young-aspire3@dixon-p4',
+        sourceUri: 'cfx:koh-young-aspire3@apex-p4',
         targetUri: 'cfx:mes-gateway',
         timestamp: '2026-09-08T01:00:00.000Z',
         uniqueId: 'CFX-KY-2026-0099',

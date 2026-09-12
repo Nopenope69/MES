@@ -203,7 +203,7 @@ describe('Dynamic Route Inventory & Capability-Based RBAC Suite', () => {
       code: 'SYS-ADMIN-01',
       name: 'Global System Administrator',
       role: 'SYSTEM_ADMIN',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });
@@ -211,9 +211,9 @@ describe('Dynamic Route Inventory & Capability-Based RBAC Suite', () => {
     const qaToken = TokenManager.generateAccessToken({
       sub: 'qa-smt-01',
       code: 'QA-SMT-01',
-      name: 'Meera Rao',
+      name: 'Quality Lead Alpha',
       role: 'QUALITY_INSPECTOR',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });
@@ -271,9 +271,9 @@ describe('Dynamic Route Inventory & Capability-Based RBAC Suite', () => {
     const operatorToken = TokenManager.generateAccessToken({
       sub: 'op-smt-01',
       code: 'OP-SMT-01',
-      name: 'Vikram Singh',
+      name: 'Operator Alpha',
       role: 'OPERATOR',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });
@@ -281,9 +281,9 @@ describe('Dynamic Route Inventory & Capability-Based RBAC Suite', () => {
     const engineerToken = TokenManager.generateAccessToken({
       sub: 'eng-01',
       code: 'ENG-01',
-      name: 'Priya Sharma',
+      name: 'Process Engineer Alpha',
       role: 'PROCESS_ENGINEER',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });
@@ -293,7 +293,7 @@ describe('Dynamic Route Inventory & Capability-Based RBAC Suite', () => {
       code: 'SYS-ADMIN-01',
       name: 'Global System Administrator',
       role: 'SYSTEM_ADMIN',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });

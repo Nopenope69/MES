@@ -25,7 +25,7 @@ describe('Track G: Security Hardening & Secrets Hygiene Suite', () => {
       code: 'SYS-ADMIN-01',
       name: 'Security Admin',
       role: 'SYSTEM_ADMIN',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });

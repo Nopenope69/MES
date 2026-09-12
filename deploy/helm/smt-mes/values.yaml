@@ -1,6 +1,6 @@
 global:
   environment: production
-  factorySite: "dixon-noida-plant-01"
+  factorySite: "apex-noida-plant-01"
 
 # MES Backend Engine & Fuji TCP Gateway
 api:

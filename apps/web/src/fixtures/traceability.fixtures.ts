@@ -29,7 +29,7 @@ export const FIXTURE_PANEL_0042: any = {
     batchNumber: 'JOB-SM-260901',
     productCode: 'PRD-SM-4G-V2',
     recipeCode: 'PROG-SM-METER-TOP-REV4',
-    workOrderNumber: 'WO-2026-DIXON-01',
+    workOrderNumber: 'WO-2026-APEX-01',
     workCenterId: 'wc-nxt-01',
     operatorId: 'op-smt-01',
     status: 'RUNNING',
@@ -63,7 +63,7 @@ function createFixtureUnit(unitPosition: number, status: 'PASSED' | 'QUALITY_HOL
       batchNumber: 'JOB-SM-260901',
       productCode: 'PRD-SM-4G-V2',
       recipeCode: 'PROG-SM-METER-TOP-REV4',
-      workOrderNumber: 'WO-2026-DIXON-01',
+      workOrderNumber: 'WO-2026-APEX-01',
       workCenterId: 'wc-nxt-01',
       operatorId: 'op-smt-01',
       status: 'RUNNING',
@@ -371,7 +371,7 @@ export const FIXTURE_RECALL_REEL: any = {
       batchId: 'job-01',
       batchNumber: 'JOB-SM-260901',
       productCode: 'PRD-SM-4G-V2',
-      workOrderNumber: 'WO-2026-DIXON-01',
+      workOrderNumber: 'WO-2026-APEX-01',
       dhrStatus: 'PENDING_QA_REVIEW'
     }
   ],

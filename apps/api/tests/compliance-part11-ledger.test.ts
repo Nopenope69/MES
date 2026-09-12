@@ -33,9 +33,9 @@ describe('21 CFR Part 11 Compliance Ledger & Two-Component E-Signature Suite', (
     operatorToken = TokenManager.generateAccessToken({
       sub: 'op-smt-01',
       code: 'OP-SMT-01',
-      name: 'Vikram Singh',
+      name: 'Operator Alpha',
       role: 'OPERATOR',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });
@@ -200,7 +200,7 @@ describe('21 CFR Part 11 Compliance Ledger & Two-Component E-Signature Suite', (
     expect(record1.sequenceNumber).toBeGreaterThan(0);
     expect(record1.actorId).toBe('op-smt-01');
     expect(record1.actorRole).toBe('OPERATOR');
-    expect(record1.organizationId).toBe('org-dixon');
+    expect(record1.organizationId).toBe('org-apex');
     expect(record1.siteId).toBe('site-noida-p4');
     expect(record1.signedAt).toBeDefined();
 

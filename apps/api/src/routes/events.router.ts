@@ -1,12 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { EventIngestionService } from '../services/event-ingestion.service';
 import { getDatabase } from '../db/database';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const eventsRouter = Router();
 
 // Ingest an event (from tablet UI, manual button, or external source)
-eventsRouter.post('/', async (req: Request, res: Response) => {
+eventsRouter.post('/', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
+    if (req.user && !req.body.operatorId) {
+      req.body.operatorId = req.user.code || req.user.id;
+    }
     const result = await EventIngestionService.ingest(req.body);
     res.status(201).json(result);
   } catch (error: any) {
@@ -20,7 +25,7 @@ eventsRouter.post('/', async (req: Request, res: Response) => {
 });
 
 // Query Tier 1 raw ingress frames (unaltered TCP socket frames)
-eventsRouter.get('/ingress', async (req: Request, res: Response) => {
+eventsRouter.get('/ingress', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const { limit = 50 } = req.query;
@@ -39,7 +44,7 @@ eventsRouter.get('/ingress', async (req: Request, res: Response) => {
 });
 
 // Query append-only event log (Audit Trail view)
-eventsRouter.get('/', async (req: Request, res: Response) => {
+eventsRouter.get('/', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const { workCenterId, batchId, eventType, limit = 50 } = req.query;

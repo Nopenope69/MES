@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { PredictiveQualityEngine } from '../services/predictive-quality.service';
 import { TelemetryStore } from '../services/telemetry-store.service';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const predictiveRouter = Router();
 const predictiveEngine = PredictiveQualityEngine.getInstance();
@@ -10,7 +12,7 @@ const telemetryStore = TelemetryStore.getInstance();
  * GET /api/v1/predictive/anomalies
  * Fetches active statistical anomalies.
  */
-predictiveRouter.get('/anomalies', async (req: Request, res: Response) => {
+predictiveRouter.get('/anomalies', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const lineId = req.query.lineId as string | undefined;
     const anomalies = await predictiveEngine.getActiveAnomalies(lineId);
@@ -24,7 +26,7 @@ predictiveRouter.get('/anomalies', async (req: Request, res: Response) => {
  * GET /api/v1/predictive/actions
  * Fetches pending predictive actions awaiting review/authorization.
  */
-predictiveRouter.get('/actions', async (_req: Request, res: Response) => {
+predictiveRouter.get('/actions', requirePermission(Permission.REPORTS_VIEW), async (_req: Request, res: Response) => {
   try {
     const actions = await predictiveEngine.getPendingActions();
     res.json({ success: true, data: actions });
@@ -37,7 +39,7 @@ predictiveRouter.get('/actions', async (_req: Request, res: Response) => {
  * POST /api/v1/predictive/evaluate/nozzle
  * Runs conditioned nozzle health evaluation (EWMA/CUSUM).
  */
-predictiveRouter.post('/evaluate/nozzle', async (req: Request, res: Response) => {
+predictiveRouter.post('/evaluate/nozzle', requirePermission(Permission.EQUIPMENT_MAINTAIN), async (req: Request, res: Response) => {
   try {
     const { nozzleId, machineId, headId, packageType, feederId, windowMinutes } = req.body;
     const report = await predictiveEngine.evaluateNozzleHealth({
@@ -58,7 +60,7 @@ predictiveRouter.post('/evaluate/nozzle', async (req: Request, res: Response) =>
  * POST /api/v1/predictive/evaluate/aperture
  * Runs continuous 3D SPI aperture clogging slope regression.
  */
-predictiveRouter.post('/evaluate/aperture', async (req: Request, res: Response) => {
+predictiveRouter.post('/evaluate/aperture', requirePermission(Permission.EQUIPMENT_MAINTAIN), async (req: Request, res: Response) => {
   try {
     const { apertureId, recipeId, windowPanels } = req.body;
     const report = await predictiveEngine.evaluateApertureClogging({
@@ -76,13 +78,14 @@ predictiveRouter.post('/evaluate/aperture', async (req: Request, res: Response) 
  * POST /api/v1/predictive/actions/:actionId/authorize
  * Safety Policy Gate: Authorizes a recommended predictive action.
  */
-predictiveRouter.post('/actions/:actionId/authorize', async (req: Request, res: Response) => {
+predictiveRouter.post('/actions/:actionId/authorize', requirePermission(Permission.QUALITY_APPROVE), async (req: Request, res: Response) => {
   try {
     const actionId = String(req.params.actionId);
-    const { authorizedBy, mode } = req.body;
+    const { mode } = req.body;
+    const authorizedBy = req.user?.code || req.user?.id || req.body.authorizedBy || 'sys-quality-lead';
     const result = await predictiveEngine.authorizeAction(
       actionId,
-      authorizedBy || 'sys-quality-lead',
+      authorizedBy,
       mode || 'MANUAL_OVERRIDE'
     );
     if (!result.success) {
@@ -98,7 +101,7 @@ predictiveRouter.post('/actions/:actionId/authorize', async (req: Request, res: 
  * POST /api/v1/predictive/actions/:actionId/execute
  * Physical Hardware Abstraction Layer execution via MachineControlModule.
  */
-predictiveRouter.post('/actions/:actionId/execute', async (req: Request, res: Response) => {
+predictiveRouter.post('/actions/:actionId/execute', requirePermission(Permission.EQUIPMENT_MAINTAIN), async (req: Request, res: Response) => {
   try {
     const actionId = String(req.params.actionId);
     const result = await predictiveEngine.executeAction(actionId);
@@ -115,7 +118,7 @@ predictiveRouter.post('/actions/:actionId/execute', async (req: Request, res: Re
  * POST /api/v1/predictive/telemetry
  * High-frequency sensor ingestion endpoint (Decoupled from EventStore).
  */
-predictiveRouter.post('/telemetry', async (req: Request, res: Response) => {
+predictiveRouter.post('/telemetry', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
     const { points } = req.body;
     if (Array.isArray(points)) {

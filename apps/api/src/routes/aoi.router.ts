@@ -5,6 +5,8 @@ import { DefectCorrelationService } from '../services/defect-correlation.service
 import { RepeatDefectSentinelService } from '../services/repeat-defect-sentinel.service';
 import { defaultAoiGateway } from '../adapters/aoi/aoi-gateway-manager';
 import { CanonicalAoiInspectionResult } from '@mes/shared';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const aoiRouter = Router();
 
@@ -13,7 +15,7 @@ export const aoiRouter = Router();
  * Ingests AOI inspection results (vendor-neutral or vendor-specific like Koh Young / Omron).
  * Enforces deduplication via (source_system, source_inspection_id, source_file_hash).
  */
-aoiRouter.post('/inspections', async (req: Request, res: Response) => {
+aoiRouter.post('/inspections', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
     const vendor = (req.query.vendor || req.headers['x-aoi-vendor'] || req.body.sourceSystem || 'KOH_YOUNG_3D_AOI') as string;
     let canonical: CanonicalAoiInspectionResult;
@@ -46,7 +48,7 @@ aoiRouter.post('/inspections', async (req: Request, res: Response) => {
  * GET /api/v1/aoi/panels/:panelBarcode
  * Retrieves complete quality status, multi-up units, defects, and history for a panel.
  */
-aoiRouter.get('/panels/:panelBarcode', async (req: Request, res: Response) => {
+aoiRouter.get('/panels/:panelBarcode', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const panelBarcode = String(req.params.panelBarcode);
     const data = await QualityEngineService.getPanelQuality(panelBarcode);
@@ -60,7 +62,7 @@ aoiRouter.get('/panels/:panelBarcode', async (req: Request, res: Response) => {
  * GET /api/v1/aoi/cad/:programId/:programRevision
  * Retrieves CAD coordinates for visual PCB rendering.
  */
-aoiRouter.get('/cad/:programId/:programRevision', async (req: Request, res: Response) => {
+aoiRouter.get('/cad/:programId/:programRevision', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const programId = String(req.params.programId);
     const programRevision = String(req.params.programRevision);
@@ -80,9 +82,10 @@ aoiRouter.get('/cad/:programId/:programRevision', async (req: Request, res: Resp
  * POST /api/v1/aoi/disposition
  * Records formal engineering disposition (REWORK, SCRAP, ACCEPT_AS_IS, REINSPECT).
  */
-aoiRouter.post('/disposition', async (req: Request, res: Response) => {
+aoiRouter.post('/disposition', requirePermission(Permission.QUALITY_APPROVE), async (req: Request, res: Response) => {
   try {
-    const { defectId, panelBarcode, unitPosition, disposition, reason, authorizedBy } = req.body;
+    const { defectId, panelBarcode, unitPosition, disposition, reason } = req.body;
+    const authorizedBy = req.user?.code || req.user?.id || req.body.authorizedBy;
     if (!defectId || !panelBarcode || !disposition || !reason || !authorizedBy) {
       return res.status(400).json({
         success: false,
@@ -109,7 +112,7 @@ aoiRouter.post('/disposition', async (req: Request, res: Response) => {
  * POST /api/v1/aoi/rework/verify-replacement
  * Verifies replacement component reel against BOM MPN, MSL floor life, and CAD thermal rework cycle limits.
  */
-aoiRouter.post('/rework/verify-replacement', async (req: Request, res: Response) => {
+aoiRouter.post('/rework/verify-replacement', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
     const { panelBarcode, unitPosition, refDes, replacementReelId } = req.body;
     if (!panelBarcode || !refDes || !replacementReelId) {
@@ -136,19 +139,19 @@ aoiRouter.post('/rework/verify-replacement', async (req: Request, res: Response)
  * POST /api/v1/aoi/rework/execute
  * Records physical component replacement on the rework bench.
  */
-aoiRouter.post('/rework/execute', async (req: Request, res: Response) => {
+aoiRouter.post('/rework/execute', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
     const {
       defectId,
       panelBarcode,
       unitPosition,
       refDes,
-      technicianId,
       stationId,
       replacementReelId,
       reworkMethod,
       temperatureProfileId
     } = req.body;
+    const technicianId = req.user?.code || req.user?.id || req.body.technicianId;
 
     if (!defectId || !panelBarcode || !refDes || !technicianId || !replacementReelId) {
       return res.status(400).json({
@@ -179,9 +182,10 @@ aoiRouter.post('/rework/execute', async (req: Request, res: Response) => {
  * POST /api/v1/aoi/post-rework-inspect
  * Closed-loop quality gate: records mandatory post-rework optical inspection.
  */
-aoiRouter.post('/post-rework-inspect', async (req: Request, res: Response) => {
+aoiRouter.post('/post-rework-inspect', requirePermission(Permission.QUALITY_APPROVE), async (req: Request, res: Response) => {
   try {
-    const { panelBarcode, unitPosition, defectId, result, inspectorId, notes } = req.body;
+    const { panelBarcode, unitPosition, defectId, result, notes } = req.body;
+    const inspectorId = req.user?.code || req.user?.id || req.body.inspectorId;
     if (!panelBarcode || !defectId || !result || !inspectorId) {
       return res.status(400).json({
         success: false,
@@ -208,9 +212,10 @@ aoiRouter.post('/post-rework-inspect', async (req: Request, res: Response) => {
  * POST /api/v1/aoi/interlocks/clear
  * Clears repeat defect production interlock on SMT line.
  */
-aoiRouter.post('/interlocks/clear', async (req: Request, res: Response) => {
+aoiRouter.post('/interlocks/clear', requirePermission(Permission.QUALITY_APPROVE), async (req: Request, res: Response) => {
   try {
-    const { workCenterId, authorizedBy, reason } = req.body;
+    const { workCenterId, reason } = req.body;
+    const authorizedBy = req.user?.code || req.user?.id || req.body.authorizedBy;
     if (!workCenterId || !authorizedBy || !reason) {
       return res.status(400).json({
         success: false,
@@ -229,7 +234,7 @@ aoiRouter.post('/interlocks/clear', async (req: Request, res: Response) => {
  * GET /api/v1/aoi/correlation/:panelBarcode/:unitPosition/:refDes
  * Upstream root-cause correlation (RefDes -> Feeder Slot -> Reel Lot -> Nozzle -> Paste Jar -> Stencil).
  */
-aoiRouter.get('/correlation/:panelBarcode/:unitPosition/:refDes', async (req: Request, res: Response) => {
+aoiRouter.get('/correlation/:panelBarcode/:unitPosition/:refDes', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const panelBarcode = String(req.params.panelBarcode);
     const unitPosition = String(req.params.unitPosition);

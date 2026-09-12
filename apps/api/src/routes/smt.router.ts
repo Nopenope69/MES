@@ -5,11 +5,13 @@ import { SplicingAuthorizationService } from '../services/splicing-authorization
 import { MslService } from '../services/msl.service';
 import { SolderPasteService } from '../services/solder-paste.service';
 import { PrinterAuthorizationService } from '../services/printer-authorization.service';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const smtRouter = Router();
 
 // Get active SMT Feeder Slot Map
-smtRouter.get('/feeders', async (req: Request, res: Response) => {
+smtRouter.get('/feeders', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const { workCenterId = 'wc-nxt-01' } = req.query;
@@ -63,10 +65,11 @@ smtRouter.get('/feeders', async (req: Request, res: Response) => {
 });
 
 // Splicing Barcode Verification (Quality Gate before physical splice)
-smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
+smtRouter.post('/splice-verify', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
-    const { workCenterId = 'wc-nxt-01', slotNo, scannedReelId, scannedPartNumber, operatorId = 'op-smt-01' } = req.body;
+    const { workCenterId = 'wc-nxt-01', slotNo, scannedReelId, scannedPartNumber } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-smt-01';
 
     const decision = await SplicingAuthorizationService.authorizeSplicing({
       workCenterId,
@@ -131,7 +134,7 @@ smtRouter.post('/splice-verify', async (req: Request, res: Response) => {
 });
 
 // Get Pick Error Pareto
-smtRouter.get('/pick-errors', async (req: Request, res: Response) => {
+smtRouter.get('/pick-errors', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const { workCenterId = 'wc-nxt-01' } = req.query;
@@ -162,7 +165,7 @@ smtRouter.get('/pick-errors', async (req: Request, res: Response) => {
 // ============================================================================
 
 // Get dynamic computed-on-read MSL status for a reel
-smtRouter.get('/msl/reel/:reelId', async (req: Request, res: Response) => {
+smtRouter.get('/msl/reel/:reelId', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const reelId = String(req.params.reelId);
     const mslService = new MslService();
@@ -174,9 +177,10 @@ smtRouter.get('/msl/reel/:reelId', async (req: Request, res: Response) => {
 });
 
 // Unseal reel MBB bag
-smtRouter.post('/msl/unseal', async (req: Request, res: Response) => {
+smtRouter.post('/msl/unseal', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { reelId, operatorId = 'op-cleanroom-01' } = req.body;
+    const { reelId } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-cleanroom-01';
     const mslService = new MslService();
     await mslService.unsealReel(reelId, operatorId);
     const status = await mslService.getReelMslStatus(reelId);
@@ -187,9 +191,10 @@ smtRouter.post('/msl/unseal', async (req: Request, res: Response) => {
 });
 
 // Move reel into dry storage cabinet
-smtRouter.post('/msl/dry-storage/enter', async (req: Request, res: Response) => {
+smtRouter.post('/msl/dry-storage/enter', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { reelId, cabinetId = 'DRY-CAB-01', operatorId = 'op-cleanroom-01' } = req.body;
+    const { reelId, cabinetId = 'DRY-CAB-01' } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-cleanroom-01';
     const mslService = new MslService();
     await mslService.enterDryStorage(reelId, cabinetId, operatorId);
     const status = await mslService.getReelMslStatus(reelId);
@@ -200,9 +205,10 @@ smtRouter.post('/msl/dry-storage/enter', async (req: Request, res: Response) => 
 });
 
 // Remove reel from dry storage cabinet
-smtRouter.post('/msl/dry-storage/exit', async (req: Request, res: Response) => {
+smtRouter.post('/msl/dry-storage/exit', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { reelId, cabinetId = 'DRY-CAB-01', operatorId = 'op-cleanroom-01' } = req.body;
+    const { reelId, cabinetId = 'DRY-CAB-01' } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-cleanroom-01';
     const mslService = new MslService();
     await mslService.exitDryStorage(reelId, cabinetId, operatorId);
     const status = await mslService.getReelMslStatus(reelId);
@@ -213,9 +219,10 @@ smtRouter.post('/msl/dry-storage/exit', async (req: Request, res: Response) => {
 });
 
 // Start bake session
-smtRouter.post('/msl/bake/start', async (req: Request, res: Response) => {
+smtRouter.post('/msl/bake/start', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { reelId, ovenId = 'OVEN-01', bakeProfileId = 'BAKE-JEDEC-125C-24H', operatorId = 'op-bake-01' } = req.body;
+    const { reelId, ovenId = 'OVEN-01', bakeProfileId = 'BAKE-JEDEC-125C-24H' } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-bake-01';
     const mslService = new MslService();
     await mslService.startBake(reelId, ovenId, bakeProfileId, operatorId);
     const status = await mslService.getReelMslStatus(reelId);
@@ -226,9 +233,10 @@ smtRouter.post('/msl/bake/start', async (req: Request, res: Response) => {
 });
 
 // Complete bake session
-smtRouter.post('/msl/bake/complete', async (req: Request, res: Response) => {
+smtRouter.post('/msl/bake/complete', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { reelId, ovenId = 'OVEN-01', operatorId = 'op-bake-01' } = req.body;
+    const { reelId, ovenId = 'OVEN-01' } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-bake-01';
     const mslService = new MslService();
     const result = await mslService.completeBake(reelId, ovenId, operatorId);
     const status = await mslService.getReelMslStatus(reelId);
@@ -243,7 +251,7 @@ smtRouter.post('/msl/bake/complete', async (req: Request, res: Response) => {
 // ============================================================================
 
 // List active solder paste jars
-smtRouter.get('/paste/jars', async (req: Request, res: Response) => {
+smtRouter.get('/paste/jars', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const jars = await db.query(`
@@ -266,9 +274,10 @@ smtRouter.get('/paste/jars', async (req: Request, res: Response) => {
 });
 
 // Remove paste jar from cold refrigeration
-smtRouter.post('/paste/remove-from-cold', async (req: Request, res: Response) => {
+smtRouter.post('/paste/remove-from-cold', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { jarId, operatorId = 'op-prep-01' } = req.body;
+    const { jarId } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-prep-01';
     const pasteService = new SolderPasteService();
     await pasteService.removeFromCold(jarId, operatorId);
     res.json({ success: true, message: `Jar ${jarId} removed from cold storage. Thawing countdown initiated.` });
@@ -278,9 +287,10 @@ smtRouter.post('/paste/remove-from-cold', async (req: Request, res: Response) =>
 });
 
 // Verify thaw duration and temperature
-smtRouter.post('/paste/verify-thaw', async (req: Request, res: Response) => {
+smtRouter.post('/paste/verify-thaw', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { jarId, temperatureVerifiedC, operatorId = 'op-prep-01' } = req.body;
+    const { jarId, temperatureVerifiedC } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-prep-01';
     const pasteService = new SolderPasteService();
     const result = await pasteService.verifyThaw(jarId, Number(temperatureVerifiedC), operatorId);
     res.json(result);
@@ -290,9 +300,10 @@ smtRouter.post('/paste/verify-thaw', async (req: Request, res: Response) => {
 });
 
 // Record planetary mixing
-smtRouter.post('/paste/mix', async (req: Request, res: Response) => {
+smtRouter.post('/paste/mix', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { jarId, durationSeconds, mixingMethod = 'CENTRIFUGAL_PLANETARY', operatorId = 'op-prep-01' } = req.body;
+    const { jarId, durationSeconds, mixingMethod = 'CENTRIFUGAL_PLANETARY' } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-prep-01';
     const pasteService = new SolderPasteService();
     const result = await pasteService.recordMixing(jarId, Number(durationSeconds), mixingMethod, operatorId);
     res.json(result);
@@ -302,9 +313,10 @@ smtRouter.post('/paste/mix', async (req: Request, res: Response) => {
 });
 
 // Authorize paste jar for printer staging
-smtRouter.post('/paste/authorize', async (req: Request, res: Response) => {
+smtRouter.post('/paste/authorize', requirePermission(Permission.QUALITY_APPROVE), async (req: Request, res: Response) => {
   try {
-    const { jarId, workCenterId = 'wc-spg-01', operatorId = 'op-prep-01' } = req.body;
+    const { jarId, workCenterId = 'wc-spg-01' } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-prep-01';
     const pasteService = new SolderPasteService();
     await pasteService.authorizeForPrinter(jarId, workCenterId, operatorId);
     res.json({ success: true, message: `Jar ${jarId} successfully authorized for production.` });
@@ -314,9 +326,10 @@ smtRouter.post('/paste/authorize', async (req: Request, res: Response) => {
 });
 
 // Load paste onto stencil
-smtRouter.post('/paste/load-on-stencil', async (req: Request, res: Response) => {
+smtRouter.post('/paste/load-on-stencil', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
-    const { jarId, stencilId, workCenterId = 'wc-spg-01', batchId, operatorId = 'op-spg-01' } = req.body;
+    const { jarId, stencilId, workCenterId = 'wc-spg-01', batchId } = req.body;
+    const operatorId = req.user?.code || req.user?.id || req.body.operatorId || 'op-spg-01';
     const pasteService = new SolderPasteService();
     const result = await pasteService.loadOnStencil(jarId, stencilId, workCenterId, batchId, operatorId);
     res.json({ success: true, message: `Jar ${jarId} loaded on stencil ${stencilId}.`, ...result });
@@ -326,7 +339,7 @@ smtRouter.post('/paste/load-on-stencil', async (req: Request, res: Response) => 
 });
 
 // Check stencil session rolling life
-smtRouter.get('/paste/stencil-session/:sessionId', async (req: Request, res: Response) => {
+smtRouter.get('/paste/stencil-session/:sessionId', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const sessionId = String(req.params.sessionId);
     const pasteService = new SolderPasteService();
@@ -338,7 +351,7 @@ smtRouter.get('/paste/stencil-session/:sessionId', async (req: Request, res: Res
 });
 
 // Screen printer quality gate start authorization
-smtRouter.post('/printer/authorize-start', async (req: Request, res: Response) => {
+smtRouter.post('/printer/authorize-start', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
     const { workCenterId = 'wc-spg-01', stencilId, pasteJarId, batchId } = req.body;
     const printerAuth = new PrinterAuthorizationService();
@@ -354,7 +367,7 @@ smtRouter.post('/printer/authorize-start', async (req: Request, res: Response) =
 });
 
 // Track A: Hardware Abstraction Layer (HAL) Equipment Gateway Status
-smtRouter.get('/equipment/status', (_req: Request, res: Response) => {
+smtRouter.get('/equipment/status', requirePermission(Permission.REPORTS_VIEW), (_req: Request, res: Response) => {
   try {
     const { EquipmentGatewayManager } = require('../adapters/equipment-gateway.manager');
     const statuses = EquipmentGatewayManager.getInstance().getAllStatuses();
@@ -365,7 +378,7 @@ smtRouter.get('/equipment/status', (_req: Request, res: Response) => {
 });
 
 // Track A: Projection Checkpoints & Catch-up Replay
-smtRouter.get('/projections/checkpoints', async (_req: Request, res: Response) => {
+smtRouter.get('/projections/checkpoints', requirePermission(Permission.REPORTS_VIEW), async (_req: Request, res: Response) => {
   try {
     const { ProjectionReplayService } = require('../services/projection-replay.service');
     const checkpoints = await ProjectionReplayService.getCheckpoints();
@@ -375,7 +388,7 @@ smtRouter.get('/projections/checkpoints', async (_req: Request, res: Response) =
   }
 });
 
-smtRouter.post('/projections/replay', async (req: Request, res: Response) => {
+smtRouter.post('/projections/replay', requirePermission(Permission.SYSTEM_MANAGE), async (req: Request, res: Response) => {
   try {
     const { fromTimestamp } = req.body;
     const { ProjectionReplayService } = require('../services/projection-replay.service');

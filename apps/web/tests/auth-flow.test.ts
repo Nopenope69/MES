@@ -23,9 +23,9 @@ describe('Web Cockpit: Operator Authentication & Session Client (Gate G-08)', ()
       const mockOperator: OperatorProfile = {
         id: 'op-01',
         code: 'OP-01',
-        name: 'Rajesh Sharma',
+        name: 'Operator Alpha',
         role: 'OPERATOR',
-        organizationId: 'org-dixon',
+        organizationId: 'org-apex',
         siteId: 'site-noida-p4'
       };
 
@@ -60,7 +60,7 @@ describe('Web Cockpit: Operator Authentication & Session Client (Gate G-08)', ()
       const mockOperator: OperatorProfile = {
         id: 'qc-01',
         code: 'QC-LEAD-01',
-        name: 'Ananya Iyer',
+        name: 'Quality Lead Alpha',
         role: 'QUALITY_LEAD'
       };
 
@@ -114,7 +114,7 @@ describe('Web Cockpit: Operator Authentication & Session Client (Gate G-08)', ()
       authService.setSessionForTesting('token-abc', {
         id: 'll-01',
         code: 'LL-01',
-        name: 'Vikram Singh',
+        name: 'Line Lead Alpha',
         role: 'LINE_LEAD'
       });
 

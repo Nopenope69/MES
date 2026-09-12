@@ -101,7 +101,7 @@ export class AuthenticationService {
     );
 
     const authzVersion = Number(operator.authz_version || 1);
-    const orgId = operator.organization_id || 'org-dixon';
+    const orgId = operator.organization_id || 'org-apex';
     const siteId = operator.site_id || 'site-noida-p4';
 
     // Issue rotating refresh session
@@ -161,7 +161,7 @@ export class AuthenticationService {
     }
 
     const operator = rows[0];
-    const orgId = operator.organization_id || 'org-dixon';
+    const orgId = operator.organization_id || 'org-apex';
     const siteId = operator.site_id || 'site-noida-p4';
 
     // Issue new access JWT

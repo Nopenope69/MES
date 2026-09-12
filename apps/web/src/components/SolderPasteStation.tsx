@@ -178,7 +178,7 @@ export const SolderPasteStation: React.FC = () => {
           jarId,
           stencilId: 'STC-SM-4G-TOP',
           workCenterId: 'wc-spg-01',
-          batchId: 'wo-dixon-01',
+          batchId: 'wo-apex-01',
           operatorId: 'op-spg-01'
         })
       });

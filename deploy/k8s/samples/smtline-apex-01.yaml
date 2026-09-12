@@ -1,7 +1,7 @@
 apiVersion: mes.antigravity.io/v1alpha1
 kind: SmtLine
 metadata:
-  name: dixon-smt-line-01
+  name: apex-smt-line-01
   namespace: default
 spec:
   lineCode: "LINE-01"

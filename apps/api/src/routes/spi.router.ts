@@ -6,6 +6,8 @@ import { PrinterControlService } from '../services/printer-control.service';
 import { PrinterCapabilityService } from '../services/printer-capability.service';
 import { CfxAmqpAdapter } from '../adapters/cfx/cfx-amqp.adapter';
 import { CanonicalSpiInspectionResult } from '@mes/shared';
+import { requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const spiRouter = Router();
 const cfxAdapter = new CfxAmqpAdapter();
@@ -15,7 +17,7 @@ const cfxAdapter = new CfxAmqpAdapter();
  * Ingests 3D SPI inspection result (Native IPC-CFX v1.7 or Canonical format)
  * and runs closed-loop diagnosis and verification loop.
  */
-spiRouter.post('/inspections', async (req: Request, res: Response) => {
+spiRouter.post('/inspections', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
     let canonical: CanonicalSpiInspectionResult;
 
@@ -43,7 +45,7 @@ spiRouter.post('/inspections', async (req: Request, res: Response) => {
  * GET /api/v1/spi/panels/:panelBarcode
  * Retrieves pad measurements and aperture inspection details for a panel.
  */
-spiRouter.get('/panels/:panelBarcode', async (req: Request, res: Response) => {
+spiRouter.get('/panels/:panelBarcode', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const db = getDatabase();
     const panelBarcode = String(req.params.panelBarcode);
@@ -130,7 +132,7 @@ spiRouter.get('/panels/:panelBarcode', async (req: Request, res: Response) => {
  * GET /api/v1/spi/spc/:recipeId
  * Retrieves rolling SPC metrics with strict N >= 30 sample size validation.
  */
-spiRouter.get('/spc/:recipeId', async (req: Request, res: Response) => {
+spiRouter.get('/spc/:recipeId', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const recipeId = String(req.params.recipeId);
     const spc = await SpiSpcService.calculateSpc(recipeId);
@@ -144,7 +146,7 @@ spiRouter.get('/spc/:recipeId', async (req: Request, res: Response) => {
  * GET /api/v1/spi/printer/capabilities
  * Retrieves screen printer declared IPC-CFX capabilities.
  */
-spiRouter.get('/printer/capabilities', async (req: Request, res: Response) => {
+spiRouter.get('/printer/capabilities', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const equipmentId = (req.query.equipmentId as string) || 'wc-spg-01';
     const caps = await PrinterCapabilityService.getPrinterCapabilities(equipmentId);
@@ -158,7 +160,7 @@ spiRouter.get('/printer/capabilities', async (req: Request, res: Response) => {
  * GET /api/v1/spi/printer/process-window/:recipeId
  * Retrieves recipe-specific process windows and machine limits.
  */
-spiRouter.get('/printer/process-window/:recipeId', async (req: Request, res: Response) => {
+spiRouter.get('/printer/process-window/:recipeId', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const recipeId = String(req.params.recipeId);
     const window = await PrinterControlService.getProcessWindow(recipeId);
@@ -172,7 +174,7 @@ spiRouter.get('/printer/process-window/:recipeId', async (req: Request, res: Res
  * GET /api/v1/spi/tuning-history
  * Retrieves full audit log of closed loop printer modifications and verification results.
  */
-spiRouter.get('/tuning-history', async (req: Request, res: Response) => {
+spiRouter.get('/tuning-history', requirePermission(Permission.REPORTS_VIEW), async (req: Request, res: Response) => {
   try {
     const limit = Number(req.query.limit) || 50;
     const history = await PrinterControlService.getTuningHistory(limit);
@@ -186,7 +188,7 @@ spiRouter.get('/tuning-history', async (req: Request, res: Response) => {
  * POST /api/v1/spi/printer/clean
  * Triggers manual or authorized stencil underside cleaning.
  */
-spiRouter.post('/printer/clean', async (req: Request, res: Response) => {
+spiRouter.post('/printer/clean', requirePermission(Permission.EQUIPMENT_MAINTAIN), async (req: Request, res: Response) => {
   try {
     const result = await PrinterControlService.executeCleaning({
       equipmentId: req.body.equipmentId || 'wc-spg-01',
@@ -206,7 +208,7 @@ spiRouter.post('/printer/clean', async (req: Request, res: Response) => {
  * POST /api/v1/spi/printer/modify-parameter
  * Adjusts process parameter (e.g. Squeegee Pressure) subject to recipe bounds.
  */
-spiRouter.post('/printer/modify-parameter', async (req: Request, res: Response) => {
+spiRouter.post('/printer/modify-parameter', requirePermission(Permission.EQUIPMENT_MAINTAIN), async (req: Request, res: Response) => {
   try {
     const result = await PrinterControlService.modifyParameter({
       equipmentId: req.body.equipmentId || 'wc-spg-01',

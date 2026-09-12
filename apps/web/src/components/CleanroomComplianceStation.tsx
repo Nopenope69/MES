@@ -4,6 +4,7 @@ import {
   Search, AlertTriangle, RefreshCw, Key, Shield, Award, Terminal
 } from 'lucide-react';
 import { audioAlerts } from '../utils/audio-alerts';
+import { authService } from '../services/auth.service';
 
 interface LedgerEntry {
   sequence_id: number;
@@ -61,14 +62,14 @@ export const CleanroomComplianceStation: React.FC = () => {
 
   const fetchLedger = async () => {
     try {
-      const res = await fetch('/api/v1/compliance/ledger/verify');
+      const res = await authService.authFetch('/api/v1/compliance/ledger/verify');
       if (res.ok) {
         const json = await res.json();
         setLedgerVerified(json.data?.valid ?? true);
       }
 
       // Fetch recent entries
-      const entRes = await fetch('/api/v1/compliance/ledger/entity/BATCH/JOB-SM-260901');
+      const entRes = await authService.authFetch('/api/v1/compliance/ledger/entity/BATCH/JOB-SM-260901');
       if (entRes.ok) {
         const json = await entRes.json();
         setLedgerEntries(json.data || []);
@@ -80,7 +81,7 @@ export const CleanroomComplianceStation: React.FC = () => {
 
   const fetchDhr = async () => {
     try {
-      const res = await fetch('/api/v1/compliance/dhr/DHR-JOB-SM-260901');
+      const res = await authService.authFetch('/api/v1/compliance/dhr/DHR-JOB-SM-260901');
       if (res.ok) {
         const json = await res.json();
         setDhr(json.data);
@@ -92,7 +93,7 @@ export const CleanroomComplianceStation: React.FC = () => {
 
   const fetchSecurityAudit = async () => {
     try {
-      const res = await fetch('/api/v1/security/audit');
+      const res = await authService.authFetch('/api/v1/security/audit');
       if (res.ok) {
         const json = await res.json();
         setSecurityReport(json.data);
@@ -106,11 +107,10 @@ export const CleanroomComplianceStation: React.FC = () => {
     setLoading(true);
     setSigningSuccess(null);
     try {
-      const res = await fetch('/api/v1/compliance/dhr/DHR-JOB-SM-260901/release', {
+      const res = await authService.authFetch('/api/v1/compliance/dhr/DHR-JOB-SM-260901/release', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': 'dev-mes-api-key-secret-2026-strict-hygiene'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           qaReviewerId: qaInspectorId,
@@ -138,7 +138,7 @@ export const CleanroomComplianceStation: React.FC = () => {
   const handleRecallSearch = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/compliance/traceability/backward/${encodeURIComponent(recallReelId)}`);
+      const res = await authService.authFetch(`/api/v1/compliance/traceability/backward/${encodeURIComponent(recallReelId)}`);
       if (res.ok) {
         const json = await res.json();
         setRecallResults(json.data?.impactedBatches || []);

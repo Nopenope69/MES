@@ -3,8 +3,8 @@ import { ComplianceLedgerService } from '../services/compliance-ledger.service';
 import { ComplianceController } from '../controllers/compliance.controller';
 import { EdhrService } from '../services/edhr.service';
 import { TraceabilityInterrogationService } from '../services/traceability-interrogation.service';
-import { apiKeyAuth } from '../security/http-security';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticateToken, requirePermission } from '../middleware/auth.middleware';
+import { Permission } from '../security/permissions';
 
 export const complianceRouter = Router();
 
@@ -12,7 +12,12 @@ export const complianceRouter = Router();
  * POST /api/v1/compliance/sign
  * Attributable 21 CFR Part 11 Two-Component Electronic Signature
  */
-complianceRouter.post('/sign', authenticateToken, ComplianceController.signLedgerEntry);
+complianceRouter.post(
+  '/sign', 
+  authenticateToken, 
+  requirePermission(Permission.COMPLIANCE_SIGN), 
+  ComplianceController.signLedgerEntry
+);
 
 /**
  * PUT /api/v1/compliance/ledger/:id
@@ -39,48 +44,14 @@ complianceRouter.delete('/ledger/:id', (_req: Request, res: Response) => {
 });
 
 /**
- * POST /api/v1/compliance/ledger/sign
- * Legacy endpoint: record signature into the chained audit ledger.
- */
-complianceRouter.post('/ledger/sign', async (req: Request, res: Response) => {
-  try {
-    const { actorId, actorRole, actionType, meaning, entityType, entityId, metadata } = req.body;
-
-    if (!actorId || !actorRole || !actionType || !meaning || !entityType || !entityId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields: actorId, actorRole, actionType, meaning, entityType, entityId'
-      });
-    }
-
-    const record = await ComplianceLedgerService.recordSignature({
-      actorId,
-      actorRole,
-      actionType,
-      meaning,
-      entityType,
-      entityId,
-      metadata
-    });
-
-    res.status(201).json({
-      success: true,
-      data: record
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to record compliance signature'
-    });
-  }
-});
-
-/**
  * GET /api/v1/compliance/ledger/verify
  * Walks the complete hash chain from Genesis to Block N, checking for data tampering,
  * altered payload hashes, or missing sequence blocks.
  */
-complianceRouter.get('/ledger/verify', async (_req: Request, res: Response) => {
+complianceRouter.get(
+  '/ledger/verify', 
+  requirePermission(Permission.REPORTS_VIEW), 
+  async (_req: Request, res: Response) => {
   try {
     const result = await ComplianceLedgerService.verifyLedgerIntegrity();
     res.json({
@@ -99,7 +70,10 @@ complianceRouter.get('/ledger/verify', async (_req: Request, res: Response) => {
  * GET /api/v1/compliance/ledger/entity/:entityType/:entityId
  * Fetches the chronological audit trail for a specific entity (REEL, BATCH, PASTE_JAR, DHR).
  */
-complianceRouter.get('/ledger/entity/:entityType/:entityId', async (req: Request, res: Response) => {
+complianceRouter.get(
+  '/ledger/entity/:entityType/:entityId', 
+  requirePermission(Permission.REPORTS_VIEW), 
+  async (req: Request, res: Response) => {
   try {
     const { entityType, entityId } = req.params;
     const records = await ComplianceLedgerService.getEntriesForEntity(String(entityType), String(entityId));
@@ -119,7 +93,10 @@ complianceRouter.get('/ledger/entity/:entityType/:entityId', async (req: Request
  * POST /api/v1/compliance/dhr/generate
  * Generates and signs an Electronic Device History Record (eDHR) per 21 CFR 820.180.
  */
-complianceRouter.post('/dhr/generate', async (req: Request, res: Response) => {
+complianceRouter.post(
+  '/dhr/generate', 
+  requirePermission(Permission.QUALITY_APPROVE), 
+  async (req: Request, res: Response) => {
   try {
     const { batchId, actorId, actorRole } = req.body;
 
@@ -130,10 +107,13 @@ complianceRouter.post('/dhr/generate', async (req: Request, res: Response) => {
       });
     }
 
+    const effectiveActorId = req.user?.code || req.user?.id || actorId || 'SYSTEM_DHR_ENGINE';
+    const effectiveActorRole = req.user?.role || actorRole || 'QA_SPECIALIST';
+
     const dhr = await EdhrService.generateDhr(
       batchId,
-      actorId || 'SYSTEM_DHR_ENGINE',
-      actorRole || 'QA_SPECIALIST'
+      effectiveActorId,
+      effectiveActorRole
     );
 
     res.status(201).json({
@@ -152,7 +132,10 @@ complianceRouter.post('/dhr/generate', async (req: Request, res: Response) => {
  * GET /api/v1/compliance/dhr/:dhrNumber
  * Fetches an eDHR and verifies its cryptographic payload integrity.
  */
-complianceRouter.get('/dhr/:dhrNumber', async (req: Request, res: Response) => {
+complianceRouter.get(
+  '/dhr/:dhrNumber', 
+  requirePermission(Permission.REPORTS_VIEW), 
+  async (req: Request, res: Response) => {
   try {
     const { dhrNumber } = req.params;
     const dhr = await EdhrService.getDhr(String(dhrNumber));
@@ -172,12 +155,16 @@ complianceRouter.get('/dhr/:dhrNumber', async (req: Request, res: Response) => {
  * POST /api/v1/compliance/dhr/:dhrNumber/release
  * Formally signs off and releases a DHR per 21 CFR Part 11 and 21 CFR 820.180.
  */
-complianceRouter.post('/dhr/:dhrNumber/release', apiKeyAuth, async (req: Request, res: Response) => {
+complianceRouter.post(
+  '/dhr/:dhrNumber/release', 
+  requirePermission(Permission.QUALITY_APPROVE), 
+  async (req: Request, res: Response) => {
   try {
     const { dhrNumber } = req.params;
     const { qaReviewerId, qaMeaning, releasedQuantity } = req.body;
 
-    if (!qaReviewerId) {
+    const effectiveReviewer = req.user?.code || req.user?.id || qaReviewerId;
+    if (!effectiveReviewer) {
       return res.status(400).json({
         success: false,
         error: 'qaReviewerId is required for formal QA release'
@@ -186,7 +173,7 @@ complianceRouter.post('/dhr/:dhrNumber/release', apiKeyAuth, async (req: Request
 
     const dhr = await EdhrService.releaseDhr(
       String(dhrNumber),
-      qaReviewerId,
+      effectiveReviewer,
       qaMeaning,
       releasedQuantity !== undefined ? Number(releasedQuantity) : undefined
     );
@@ -207,7 +194,10 @@ complianceRouter.post('/dhr/:dhrNumber/release', apiKeyAuth, async (req: Request
  * GET /api/v1/compliance/traceability/backward/:identifier
  * ISO 13485 Clause 7.5.3 Backward Recall Containment Analysis
  */
-complianceRouter.get('/traceability/backward/:identifier', async (req: Request, res: Response) => {
+complianceRouter.get(
+  '/traceability/backward/:identifier', 
+  requirePermission(Permission.REPORTS_VIEW), 
+  async (req: Request, res: Response) => {
   try {
     const { identifier } = req.params;
     const result = await TraceabilityInterrogationService.backwardRecall(String(identifier));
@@ -227,7 +217,10 @@ complianceRouter.get('/traceability/backward/:identifier', async (req: Request, 
  * GET /api/v1/compliance/traceability/forward/:identifier
  * ISO 13485 Clause 7.5.3 Forward As-Built BoM Genealogy Interrogation
  */
-complianceRouter.get('/traceability/forward/:identifier', async (req: Request, res: Response) => {
+complianceRouter.get(
+  '/traceability/forward/:identifier', 
+  requirePermission(Permission.REPORTS_VIEW), 
+  async (req: Request, res: Response) => {
   try {
     const { identifier } = req.params;
     const result = await TraceabilityInterrogationService.forwardLineage(String(identifier));

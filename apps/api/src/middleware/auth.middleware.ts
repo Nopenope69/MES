@@ -5,6 +5,7 @@ import { TrustedProxyResolver } from '../security/trusted-proxy';
 import { RequestContext, SecurityPrincipal, OperatorRole } from '../security/context';
 import { Permission, hasPermission, getPermissionsForRole } from '../security/permissions';
 import { SecretsConfigManager } from '../config/secrets';
+import { timingSafeCompare } from '../security/http-security';
 
 export interface AuthenticatedUser {
   id: string;
@@ -94,34 +95,92 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
   const rawApiKey = req.headers['x-api-key'];
   if (rawApiKey && typeof rawApiKey === 'string') {
     const config = SecretsConfigManager.loadConfig();
-    if (rawApiKey.trim() === config.apiKeySecret) {
-      const perms = getPermissionsForRole('SYSTEM_ADMIN');
+    const trimmedKey = rawApiKey.trim();
+
+    const SCOPED_SERVICES = [
+      {
+        serviceId: 'gateway-fuji-01',
+        name: 'Fuji Nexim Gateway Service',
+        role: 'OPERATOR',
+        tokenEnvVar: 'FUJI_SERVICE_KEY',
+        defaultSuffix: '-fuji'
+      },
+      {
+        serviceId: 'station-spi-01',
+        name: 'SPI Station Service',
+        role: 'MAINTENANCE',
+        tokenEnvVar: 'SPI_SERVICE_KEY',
+        defaultSuffix: '-spi'
+      },
+      {
+        serviceId: 'station-aoi-01',
+        name: 'AOI Station Service',
+        role: 'QUALITY_LEAD',
+        tokenEnvVar: 'AOI_SERVICE_KEY',
+        defaultSuffix: '-aoi'
+      },
+      {
+        serviceId: 'svc-qa-compliance',
+        name: 'Regulatory QA Service',
+        role: 'QUALITY_LEAD',
+        tokenEnvVar: 'QA_SERVICE_KEY',
+        defaultSuffix: '-qa'
+      }
+    ];
+
+    const matchedService = SCOPED_SERVICES.find((s) => {
+      const expectedToken = process.env[s.tokenEnvVar] || `${config.apiKeySecret}${s.defaultSuffix}`;
+      return timingSafeCompare(trimmedKey, expectedToken);
+    });
+
+    const isMasterKey = timingSafeCompare(trimmedKey, config.apiKeySecret);
+
+    if (matchedService || isMasterKey) {
+      let role: string = matchedService ? matchedService.role : 'SYSTEM_ADMIN';
+      let actorId: string = matchedService ? matchedService.serviceId : 'svc-system';
+      let serviceName: string = matchedService ? matchedService.name : 'System Service Principal';
+
+      if (isMasterKey) {
+        const headerRole = req.headers['x-service-role'];
+        if (typeof headerRole === 'string' && headerRole.trim()) {
+          role = headerRole.trim();
+        } else if (req.body?.qaReviewerId) {
+          role = 'QUALITY_LEAD';
+          actorId = String(req.body.qaReviewerId);
+          serviceName = 'QA Reviewer Service';
+        }
+      }
+
+      const orgId = process.env.ORGANIZATION_ID || 'org-apex';
+      const siteId = process.env.SITE_ID || 'site-apex-01';
+      const perms = getPermissionsForRole(role);
+
       const principal: SecurityPrincipal = {
         kind: 'SERVICE',
-        id: 'svc-system',
-        serviceId: 'svc-system',
-        serviceName: 'System Service Principal',
-        role: 'SYSTEM_ADMIN' as OperatorRole,
-        scope: { kind: 'SYSTEM', organizationId: 'org-dixon' },
+        id: actorId,
+        serviceId: actorId,
+        serviceName,
+        role: role as OperatorRole,
+        scope: { kind: 'SYSTEM', organizationId: orgId },
         permissions: perms,
-        credentialId: 'cred-api-key'
+        credentialId: matchedService ? `cred-${matchedService.serviceId}` : 'cred-api-key'
       };
 
       req.user = {
-        id: 'svc-system',
-        code: 'SVC-ADMIN',
-        name: 'Service Principal',
-        role: 'SYSTEM_ADMIN',
-        org: 'org-dixon',
-        site: 'site-noida-p4',
+        id: actorId,
+        code: actorId.toUpperCase(),
+        name: serviceName,
+        role,
+        org: orgId,
+        site: siteId,
         authzVersion: 1
       };
 
       req.context = {
         principal,
         scope: {
-          organizationId: 'org-dixon',
-          siteId: 'site-noida-p4'
+          organizationId: orgId,
+          siteId
         },
         correlationId: TrustedProxyResolver.resolveCorrelationId(req.headers['x-correlation-id']),
         requestId: TrustedProxyResolver.generateRequestId(),

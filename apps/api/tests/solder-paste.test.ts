@@ -94,7 +94,7 @@ describe('Solder Paste & Stencil Lifecycle Management Suite (Stage 01 SPG-01)', 
   });
 
   it('Loads authorized jar on stencil and starts stencil session with 480m life', async () => {
-    const { sessionId } = await pasteService.loadOnStencil('JAR-ALPHA-TEST-01', 'STC-SM-4G-TOP', 'wc-spg-01', 'wo-dixon-01', 'op-spg-01');
+    const { sessionId } = await pasteService.loadOnStencil('JAR-ALPHA-TEST-01', 'STC-SM-4G-TOP', 'wc-spg-01', 'wo-apex-01', 'op-spg-01');
 
     const lifeStatus = await pasteService.checkStencilLife(sessionId);
     expect(lifeStatus.stencilLifeMinutes).toBe(480);

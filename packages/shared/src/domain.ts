@@ -41,7 +41,7 @@ export interface WorkCenter {
   name: string;
   area: string;
   type: 'SMT_LINE' | 'SCREEN_PRINTER' | 'PICK_AND_PLACE' | 'REFLOW_OVEN' | 'AOI_INSPECTION' | 'WAVE_SOLDERING';
-  assetPath: string; // e.g. "DIXON.NOIDA-P4.SMT-A.LINE-01.WC-NXT-01"
+  assetPath: string; // e.g. "APEX.NOIDA-P4.SMT-A.LINE-01.WC-NXT-01"
   currentState: EquipmentState;
   currentBatchId?: string;       // Active Job / Work Order
   currentProgramName?: string;  // Active Fuji setup program (e.g. "PROG-SM-METER-TOP-REV4")
@@ -113,7 +113,7 @@ export type SmtJobStatus = 'PLANNED' | 'READY' | 'RUNNING' | 'STOPPED' | 'COMPLE
 export interface SmtJob {
   id: string;
   batchNumber: string;         // Job Run Number e.g. "JOB-SM-260901"
-  workOrderNumber: string;     // Work Order e.g. "WO-2026-DIXON-01"
+  workOrderNumber: string;     // Work Order e.g. "WO-2026-APEX-01"
   productCode: string;
   productName: string;
   recipeCode: string;          // Program Code e.g. "PROG-SM-METER-TOP-REV4"

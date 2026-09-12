@@ -289,7 +289,7 @@ describe('Phase 5: Multi-Line Fleet Orchestration, Material Logistics & Predicti
       expect(unauthExecution.reason).toContain('SAFETY_ABORT');
 
       // 2. Authorize action
-      const authResult = await predictiveEngine.authorizeAction(stencilWipeAction!.id, 'qa-lead-meera', 'POLICY_AUTO');
+      const authResult = await predictiveEngine.authorizeAction(stencilWipeAction!.id, 'qa-lead-alpha', 'POLICY_AUTO');
       expect(authResult.success).toBe(true);
 
       // 3. Execute authorized action via MachineControlModule

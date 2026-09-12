@@ -101,7 +101,7 @@ describe('Track C: DevOps, Packaging & Factory-Edge Deployment Suite', () => {
 
   it('defines Kubernetes Operator CRD and sample manifest for SMT production lines', () => {
     const crdPath = path.join(rootDir, 'deploy/k8s/crd/smtlines.mes.antigravity.io.yaml');
-    const samplePath = path.join(rootDir, 'deploy/k8s/samples/smtline-dixon-01.yaml');
+    const samplePath = path.join(rootDir, 'deploy/k8s/samples/smtline-apex-01.yaml');
 
     expect(fs.existsSync(crdPath)).toBe(true);
     expect(fs.existsSync(samplePath)).toBe(true);
@@ -115,7 +115,7 @@ describe('Track C: DevOps, Packaging & Factory-Edge Deployment Suite', () => {
 
     const sampleContent = fs.readFileSync(samplePath, 'utf-8');
     expect(sampleContent).toContain('kind: SmtLine');
-    expect(sampleContent).toContain('name: dixon-smt-line-01');
+    expect(sampleContent).toContain('name: apex-smt-line-01');
     expect(sampleContent).toContain('lineCode: "LINE-01"');
     expect(sampleContent).toContain('ratedCph: 75000');
   });

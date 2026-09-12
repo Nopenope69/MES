@@ -63,7 +63,7 @@ export const SupervisorDashboard: React.FC = () => {
   const copyHandoverSummary = () => {
     if (!report) return;
 
-    const summaryText = `[DIXON SMT LINE 01 - SHIFT HANDOVER BRIEFING]
+    const summaryText = `[APEX SMT LINE 01 - SHIFT HANDOVER BRIEFING]
 Shift: ${report.shiftCode} | Date: ${report.date}
 Fuji NXT III Placement Line (Program: PROG-SM-METER-TOP-REV4)
 --------------------------------------------------

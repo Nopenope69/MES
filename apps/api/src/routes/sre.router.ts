@@ -11,7 +11,7 @@ export const sreRouter = Router();
  * GET /api/v1/sre/slos
  * Returns live SLI evaluations, error budget consumption, and burn rates.
  */
-sreRouter.get('/slos', async (_req: Request, res: Response) => {
+sreRouter.get('/slos', requirePermission(Permission.REPORTS_VIEW), async (_req: Request, res: Response) => {
   try {
     const report = await SloMonitorService.evaluateSlos();
     res.json({

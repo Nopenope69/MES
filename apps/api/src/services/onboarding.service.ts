@@ -124,7 +124,7 @@ export class OnboardingService {
         throw new Error('ADMIN_USERNAME_REQUIRED: Initial SYSTEM_ADMIN username code is required.');
       }
 
-      const orgId = payload.organizationId || 'org-dixon';
+      const orgId = payload.organizationId || 'org-apex';
       const siteId = payload.siteId || 'site-noida-p4';
       const adminCode = payload.adminUsername.trim();
       const adminId = payload.adminId || `op-${adminCode.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
@@ -138,7 +138,7 @@ export class OnboardingService {
         );
         await tx.execute(
           'INSERT INTO organization_settings (organization_id, setting_key, setting_value) VALUES (?, ?, ?)',
-          [orgId, 'organization_name', payload.organizationName || 'Dixon Technologies SMT']
+          [orgId, 'organization_name', payload.organizationName || 'Apex Electronics SMT']
         );
         await tx.execute(
           'INSERT INTO organization_settings (organization_id, setting_key, setting_value) VALUES (?, ?, ?)',

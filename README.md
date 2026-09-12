@@ -86,7 +86,7 @@ npm run package:exe
 │   ├── api/             # Express server, SQLite/PostgreSQL driver, Fuji TCP gateway, Event Ingestion
 │   │   ├── src/adapters/# Fuji Nexim Gateway & Fuji SMT Line Simulator
 │   │   ├── src/services/# Event Ingestion, State Projections, Genealogy, OEE & Pareto
-│   │   └── src/db/      # ISA-95 Schema & Dixon Technologies SMT Line 01 seed dataset
+│   │   └── src/db/      # ISA-95 Schema & Apex Electronics SMT Line 01 seed dataset
 │   └── web/             # React 19 + Vite + Tailwind CSS industrial cleanroom instrument UI
 └── docs/
     └── architecture/    # ADR-001, ADR-002, ADR-003
@@ -103,7 +103,7 @@ npm --workspace=@mes/shared run build
 ```
 
 ### 2. Seed the SMT Database
-Populates Dixon Technologies Noida SMT Line 01 with authentic programs, component reels, and feeder slots:
+Populates Apex Electronics Noida SMT Line 01 with authentic programs, component reels, and feeder slots:
 ```bash
 npm --workspace=@mes/api run seed
 ```

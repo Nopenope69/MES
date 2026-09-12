@@ -65,17 +65,17 @@ export async function seedDatabase(): Promise<void> {
     DELETE FROM organizations;
   `);
 
-  console.log('[SEED] Inserting ISA-95 Asset Hierarchy for Dixon SMT Facility...');
+  console.log('[SEED] Inserting ISA-95 Asset Hierarchy for Apex Electronics SMT Facility...');
   // 1. Organization
   await db.execute(`
     INSERT INTO organizations (id, code, name)
-    VALUES ('org-dixon', 'ORG-DIXON', 'Dixon Technologies (India) Ltd')
+    VALUES ('org-apex', 'ORG-APEX', 'Apex Electronics Ltd')
   `);
 
   // 2. Site
   await db.execute(`
     INSERT INTO sites (id, organization_id, code, name, location, timezone)
-    VALUES ('site-noida-p4', 'org-dixon', 'SITE-NOIDA-P4', 'Noida Sector 63 SMT Facility', 'Noida, Uttar Pradesh, India', 'Asia/Kolkata')
+    VALUES ('site-noida-p4', 'org-apex', 'SITE-NOIDA-P4', 'Apex Electronics SMT Facility Line 01', 'Noida, Uttar Pradesh, India', 'Asia/Kolkata')
   `);
 
   // 3. Area
@@ -98,24 +98,24 @@ export async function seedDatabase(): Promise<void> {
   await db.execute(`
     INSERT INTO work_centers (id, line_id, code, name, area, type, asset_path, current_state, current_program_name, module_count, last_state_change_time)
     VALUES 
-      ('wc-spg-01', 'line-smt-01', 'WC-SPG-01', 'Fuji GPX-C Solder Paste Screen Printer', 'SMT Cleanroom Bay A', 'SCREEN_PRINTER', 'ORG-DIXON.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-01.WC-SPG-01', 'RUNNING', 'PROG-SM-METER-TOP-REV4', 1, ?),
-      ('wc-nxt-01', 'line-smt-01', 'WC-NXT-01', 'Fuji NXT III M6 Pick-and-Place (4 Modules)', 'SMT Cleanroom Bay A', 'PICK_AND_PLACE', 'ORG-DIXON.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-01.WC-NXT-01', 'RUNNING', 'PROG-SM-METER-TOP-REV4', 4, ?),
-      ('wc-rfl-01', 'line-smt-01', 'WC-RFL-01', 'Heller 1913 MK5 10-Zone Reflow Oven', 'SMT Cleanroom Bay A', 'REFLOW_OVEN', 'ORG-DIXON.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-01.WC-RFL-01', 'RUNNING', 'PROG-SM-METER-TOP-REV4', 1, ?),
-      ('wc-aoi-01', 'line-smt-01', 'WC-AOI-01', 'Koh Young 3D AOI Optical Inspector', 'Post-Reflow Optical Inspection Suite', 'AOI_INSPECTION', 'ORG-DIXON.SITE-NOIDA-P4.AREA-AOI-01.LINE-SMT-01.WC-AOI-01', 'RUNNING', 'PROG-SM-METER-TOP-REV4', 1, ?),
-      ('wc-spg-02', 'line-smt-02', 'WC-SPG-02', 'DEK NeoHorizon High-Precision Screen Printer', 'SMT Cleanroom Bay A', 'SCREEN_PRINTER', 'ORG-DIXON.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-02.WC-SPG-02', 'RUNNING', 'PROG-AUTO-ECU-TOP-REV1', 1, ?),
-      ('wc-nxt-02', 'line-smt-02', 'WC-NXT-02', 'Fuji NXT III M6 Pick-and-Place (Module 2)', 'SMT Cleanroom Bay A', 'PICK_AND_PLACE', 'ORG-DIXON.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-02.WC-NXT-02', 'RUNNING', 'PROG-AUTO-ECU-TOP-REV1', 4, ?),
-      ('wc-rfl-02', 'line-smt-02', 'WC-RFL-02', 'Rehm Nitro 12-Zone Nitrogen Reflow Oven', 'SMT Cleanroom Bay A', 'REFLOW_OVEN', 'ORG-DIXON.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-02.WC-RFL-02', 'RUNNING', 'PROG-AUTO-ECU-TOP-REV1', 1, ?),
-      ('wc-aoi-02', 'line-smt-02', 'WC-AOI-02', 'Omron VT-S1080 3D AOI Dual-Lane Inspector', 'Post-Reflow Optical Inspection Suite', 'AOI_INSPECTION', 'ORG-DIXON.SITE-NOIDA-P4.AREA-AOI-01.LINE-SMT-02.WC-AOI-02', 'RUNNING', 'PROG-AUTO-ECU-TOP-REV1', 1, ?)
+      ('wc-spg-01', 'line-smt-01', 'WC-SPG-01', 'Fuji GPX-C Solder Paste Screen Printer', 'SMT Cleanroom Bay A', 'SCREEN_PRINTER', 'ORG-APEX.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-01.WC-SPG-01', 'RUNNING', 'PROG-SM-METER-TOP-REV4', 1, ?),
+      ('wc-nxt-01', 'line-smt-01', 'WC-NXT-01', 'Fuji NXT III M6 Pick-and-Place (4 Modules)', 'SMT Cleanroom Bay A', 'PICK_AND_PLACE', 'ORG-APEX.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-01.WC-NXT-01', 'RUNNING', 'PROG-SM-METER-TOP-REV4', 4, ?),
+      ('wc-rfl-01', 'line-smt-01', 'WC-RFL-01', 'Heller 1913 MK5 10-Zone Reflow Oven', 'SMT Cleanroom Bay A', 'REFLOW_OVEN', 'ORG-APEX.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-01.WC-RFL-01', 'RUNNING', 'PROG-SM-METER-TOP-REV4', 1, ?),
+      ('wc-aoi-01', 'line-smt-01', 'WC-AOI-01', 'Koh Young 3D AOI Optical Inspector', 'Post-Reflow Optical Inspection Suite', 'AOI_INSPECTION', 'ORG-APEX.SITE-NOIDA-P4.AREA-AOI-01.LINE-SMT-01.WC-AOI-01', 'RUNNING', 'PROG-SM-METER-TOP-REV4', 1, ?),
+      ('wc-spg-02', 'line-smt-02', 'WC-SPG-02', 'DEK NeoHorizon High-Precision Screen Printer', 'SMT Cleanroom Bay A', 'SCREEN_PRINTER', 'ORG-APEX.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-02.WC-SPG-02', 'RUNNING', 'PROG-AUTO-ECU-TOP-REV1', 1, ?),
+      ('wc-nxt-02', 'line-smt-02', 'WC-NXT-02', 'Fuji NXT III M6 Pick-and-Place (Module 2)', 'SMT Cleanroom Bay A', 'PICK_AND_PLACE', 'ORG-APEX.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-02.WC-NXT-02', 'RUNNING', 'PROG-AUTO-ECU-TOP-REV1', 4, ?),
+      ('wc-rfl-02', 'line-smt-02', 'WC-RFL-02', 'Rehm Nitro 12-Zone Nitrogen Reflow Oven', 'SMT Cleanroom Bay A', 'REFLOW_OVEN', 'ORG-APEX.SITE-NOIDA-P4.AREA-SMT-01.LINE-SMT-02.WC-RFL-02', 'RUNNING', 'PROG-AUTO-ECU-TOP-REV1', 1, ?),
+      ('wc-aoi-02', 'line-smt-02', 'WC-AOI-02', 'Omron VT-S1080 3D AOI Dual-Lane Inspector', 'Post-Reflow Optical Inspection Suite', 'AOI_INSPECTION', 'ORG-APEX.SITE-NOIDA-P4.AREA-AOI-01.LINE-SMT-02.WC-AOI-02', 'RUNNING', 'PROG-AUTO-ECU-TOP-REV1', 1, ?)
   `, [now, now, now, now, now, now, now, now]);
 
   console.log('[SEED] Inserting SMT Operators & Shift Schedules...');
   await db.execute(`
     INSERT INTO operators (id, code, name, role, pin)
     VALUES
-      ('op-smt-01', 'OP-SMT-01', 'Vikram Singh (Feeder Specialist)', 'OPERATOR', '1234'),
-      ('op-smt-02', 'OP-SMT-02', 'Rahul Yadav (Splicing Tech)', 'OPERATOR', '2345'),
-      ('sup-smt-01', 'SUP-SMT-01', 'Deepak Sharma (SMT Line Leader)', 'SMT_SUPERVISOR', '9999'),
-      ('qa-smt-01', 'QA-SMT-01', 'Meera Rao (Quality Lead)', 'QUALITY_INSPECTOR', '8888')
+      ('op-smt-01', 'OP-SMT-01', 'Operator Alpha (Feeder Specialist)', 'OPERATOR', '1234'),
+      ('op-smt-02', 'OP-SMT-02', 'Operator Beta (Splicing Tech)', 'OPERATOR', '2345'),
+      ('sup-smt-01', 'SUP-SMT-01', 'Line Lead Alpha (SMT Line Leader)', 'SMT_SUPERVISOR', '9999'),
+      ('qa-smt-01', 'QA-SMT-01', 'Quality Lead Alpha (Quality Lead)', 'QUALITY_INSPECTOR', '8888')
   `);
 
   await db.execute(`
@@ -250,12 +250,12 @@ export async function seedDatabase(): Promise<void> {
   console.log('[SEED] Inserting Active SMT Production Run...');
   await db.execute(`
     INSERT INTO work_orders (id, order_number, product_code, target_quantity, status, created_at)
-    VALUES ('wo-dixon-01', 'WO-2026-DIXON-01', 'PRD-SM-4G-V2', 500.0, 'IN_PROGRESS', ?)
+    VALUES ('wo-apex-01', 'WO-2026-APEX-01', 'PRD-SM-4G-V2', 500.0, 'IN_PROGRESS', ?)
   `, [now]);
 
   await db.execute(`
     INSERT INTO batches (id, batch_number, work_order_number, product_code, recipe_code, work_center_id, status, planned_quantity, actual_quantity, rejected_quantity, unit, started_at, operator_id)
-    VALUES ('job-01', 'JOB-SM-260901', 'WO-2026-DIXON-01', 'PRD-SM-4G-V2', 'PROG-SM-METER-TOP-REV4', 'wc-nxt-01', 'RUNNING', 500.0, 142.0, 3.0, 'PANEL', ?, 'op-smt-01')
+    VALUES ('job-01', 'JOB-SM-260901', 'WO-2026-APEX-01', 'PRD-SM-4G-V2', 'PROG-SM-METER-TOP-REV4', 'wc-nxt-01', 'RUNNING', 500.0, 142.0, 3.0, 'PANEL', ?, 'op-smt-01')
   `, [now]);
 
   await db.execute(`
@@ -706,7 +706,7 @@ export async function seedDatabase(): Promise<void> {
     ]);
   }
 
-  console.log('[SEED] Dixon SMT Multi-Line Facility (Line 01 & Line 02) successfully seeded with Phase 5 & Phase 6 fixtures.');
+  console.log('[SEED] Apex SMT Multi-Line Facility (Line 01 & Line 02) successfully seeded with Phase 5 & Phase 6 fixtures.');
 }
 
 if (require.main === module && process.argv[1] && (process.argv[1].endsWith('seed.ts') || process.argv[1].endsWith('seed.js') || process.argv[1].includes('seed'))) {

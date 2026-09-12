@@ -131,7 +131,7 @@ export const FleetDashboard: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono uppercase tracking-widest text-[#7A8A9E]">
-                {overview?.facility || 'DIXON SMT FACILITY'} • {overview?.bayName || 'SMT BAY 1'}
+                {overview?.facility || 'APEX SMT FACILITY'} • {overview?.bayName || 'SMT BAY 1'}
               </span>
               <span className="w-2 h-2 rounded-full bg-[#00E699] animate-pulse" />
               <span className="text-[10px] font-mono text-[#00E699] font-bold uppercase">

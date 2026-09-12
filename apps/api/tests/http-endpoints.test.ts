@@ -27,9 +27,9 @@ describe('End-to-End HTTP API Endpoints Test Suite', () => {
     authToken = TokenManager.generateAccessToken({
       sub: 'sup-smt-01',
       code: 'SUP-SMT-01',
-      name: 'Deepak Sharma',
+      name: 'Line Lead Alpha',
       role: 'SMT_SUPERVISOR',
-      org: 'org-dixon',
+      org: 'org-apex',
       site: 'site-noida-p4',
       authzVersion: 1
     });

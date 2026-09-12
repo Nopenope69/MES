@@ -123,7 +123,7 @@ describe('Tenant & Site Persistence Scoping Suite', () => {
         operatorCode: 'OP-A1',
         role: 'OPERATOR',
         permissions: new Set(['batch:view']),
-        organizationId: 'ORG-DIXON',
+        organizationId: 'ORG-APEX',
         siteId: 'SITE-NOIDA-01',
         sessionId: 'sess-a'
       },
@@ -143,7 +143,7 @@ describe('Tenant & Site Persistence Scoping Suite', () => {
         kind: 'SERVICE',
         serviceId: 'srv-backup',
         serviceName: 'backup-runner',
-        scope: { kind: 'SYSTEM', organizationId: 'ORG-DIXON' },
+        scope: { kind: 'SYSTEM', organizationId: 'ORG-APEX' },
         permissions: new Set(['system:backup']),
         credentialId: 'cred-1'
       },
