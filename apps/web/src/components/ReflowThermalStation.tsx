@@ -13,6 +13,7 @@ import {
   Lock,
   Cpu
 } from 'lucide-react';
+import { authService } from '../services/auth.service';
 
 interface ProbeSample {
   timeSeconds: number;
@@ -188,14 +189,16 @@ export const ReflowThermalStation: React.FC = () => {
         boardRevision
       });
 
-      const res = await fetch(`/api/v1/reflow/profiles/active?${query.toString()}`);
+      const res = await authService.authFetch(`/api/v1/reflow/profiles/active?${query.toString()}`);
       if (res.ok) {
         const json = await res.json();
         if (json.data) {
-          setActiveProfile(json.data);
-          if (json.data.probes && json.data.probes.length > 0) {
+          const run = json.data.run || json.data;
+          const probeList = json.data.probes || run.probes || [];
+          setActiveProfile(run);
+          if (probeList && probeList.length > 0) {
             setProbes(
-              json.data.probes.map((p: any, idx: number) => ({
+              probeList.map((p: any, idx: number) => ({
                 probeIndex: p.probeIndex || idx + 1,
                 label: p.label || `TC ${idx + 1}`,
                 thermalRole: p.thermalRole || 'SOLDER_JOINT',
@@ -210,7 +213,7 @@ export const ReflowThermalStation: React.FC = () => {
       }
 
       // Fetch process state
-      const stateRes = await fetch(
+      const stateRes = await authService.authFetch(
         `/api/v1/reflow/process-state/${lineId}/${equipmentId}?recipeId=${recipeId}&boardPartNumber=${boardPartNumber}&boardRevision=${boardRevision}`
       );
       if (stateRes.ok) {
@@ -240,7 +243,7 @@ export const ReflowThermalStation: React.FC = () => {
     setUploadLoading(true);
     setStatusMessage(null);
     try {
-      const res = await fetch('/api/v1/reflow/profiles/import', {
+      const res = await authService.authFetch('/api/v1/reflow/profiles/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -279,7 +282,7 @@ export const ReflowThermalStation: React.FC = () => {
     setStatusMessage(null);
     try {
       // 1. Approve
-      const approveRes = await fetch(`/api/v1/reflow/profiles/${activeProfile.id}/approve`, {
+      const approveRes = await authService.authFetch(`/api/v1/reflow/profiles/${activeProfile.id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -294,7 +297,7 @@ export const ReflowThermalStation: React.FC = () => {
       }
 
       // 2. Activate
-      const activateRes = await fetch(`/api/v1/reflow/profiles/${activeProfile.id}/activate`, {
+      const activateRes = await authService.authFetch(`/api/v1/reflow/profiles/${activeProfile.id}/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -463,7 +466,7 @@ export const ReflowThermalStation: React.FC = () => {
           </div>
           <div className="mt-3">
             <span className="text-sm font-mono font-bold text-white">
-              {activeProfile ? activeProfile.id.slice(0, 16) : 'RUN-P6-SAC305-BASE'}
+              {activeProfile?.id ? activeProfile.id.slice(0, 16) : 'RUN-P6-SAC305-BASE'}
             </span>
             <span className="block text-[11px] text-[#7A8A9E] mt-1 font-mono">
               Status: <span className="text-emerald-400 font-bold">{activeProfile?.status || 'ACTIVE'}</span>

@@ -1,0 +1,68 @@
+{
+  "concurrentActiveStations": {
+    "target": 12,
+    "unit": "connected_clients",
+    "operator": ">=",
+    "description": "2 SMT lines × 6 stations (Printer, SPI, Fuji 1, Fuji 2, Oven, AOI)"
+  },
+  "sustainedThroughputTxSec": {
+    "target": 50.0,
+    "unit": "tx/s",
+    "operator": ">=",
+    "description": "Accommodates 35 components/sec placement rate + continuous SPI/reflow telemetry"
+  },
+  "p95ReadLatencyMs": {
+    "target": 120,
+    "unit": "ms",
+    "operator": "<=",
+    "description": "Genealogy queries, DHR checks, station status refreshes under load"
+  },
+  "p95WriteLatencyMs": {
+    "target": 80,
+    "unit": "ms",
+    "operator": "<=",
+    "description": "Real-time interlocks (/smt/splice-verify, barcode scans, placement events)"
+  },
+  "databasePoolSaturationPct": {
+    "target": 75,
+    "unit": "percent",
+    "operator": "<=",
+    "description": "Maximum 15 active connections on a pool limit of 20 connections"
+  },
+  "genealogyRecordLoss": {
+    "target": 0,
+    "unit": "records",
+    "operator": "==",
+    "description": "Zero tolerance. Every placement and splice event must land in canonical log"
+  },
+  "traceabilityDuplication": {
+    "target": 0,
+    "unit": "duplicate_events",
+    "operator": "==",
+    "description": "Idempotency keys must eliminate duplicate ingestion events under retry conditions"
+  },
+  "serviceRestartRecoverySec": {
+    "target": 10.0,
+    "unit": "seconds",
+    "operator": "<=",
+    "description": "Time from SIGTERM to healthy status on /health under load"
+  },
+  "heapMemoryDriftPct": {
+    "target": 15,
+    "unit": "percent",
+    "operator": "<=",
+    "description": "Node.js heap must stabilize after warm-up; no circular reference memory leaks"
+  },
+  "diskStorageIngestionMultiplier": {
+    "target": 1.2,
+    "unit": "multiplier",
+    "operator": "<=",
+    "description": "Expected telemetry rate: ~600 MB/day; total growth <= 720 MB"
+  },
+  "crossStationClockSkewMs": {
+    "target": 500,
+    "unit": "ms",
+    "operator": "<=",
+    "description": "Monitored via NTP drift check in station health probe"
+  }
+}

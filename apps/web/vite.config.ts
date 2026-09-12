@@ -11,5 +11,8 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  test: {
+    exclude: ['**/tests/e2e/**', '**/node_modules/**']
   }
 });

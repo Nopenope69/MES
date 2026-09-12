@@ -166,6 +166,9 @@ describe('Perimeter, SafeConnector & Egress Policy Suite (Task 6)', () => {
   describe('2. Transactional Onboarding & Provisioning State Machine', () => {
     beforeEach(async () => {
       await initDatabase();
+      const db = getDatabase();
+      await db.execute("DELETE FROM system_settings WHERE setting_key = 'lifecycle_state'");
+      await db.execute("DELETE FROM operators WHERE role = 'SYSTEM_ADMIN'");
       OnboardingService.reset();
     });
 

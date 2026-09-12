@@ -39,6 +39,8 @@ Thumbs.db
 *.swp
 *.swo
 
-# Test coverage
+# Test coverage & artifacts
 coverage/
 .nyc_output/
+test-results/
+playwright-report/

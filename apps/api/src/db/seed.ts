@@ -113,10 +113,14 @@ export async function seedDatabase(): Promise<void> {
   await db.execute(`
     INSERT INTO operators (id, code, name, role, pin)
     VALUES
+      ('op-01', 'OP-01', 'Operator Alpha (Feeder Specialist)', 'OPERATOR', '1234'),
+      ('qc-lead-01', 'QC-LEAD-01', 'Quality Lead Alpha', 'QUALITY_LEAD', '4321'),
+      ('ll-01', 'LL-01', 'Line Lead Alpha', 'LINE_LEAD', '5678'),
+      ('sys-admin-01', 'SYS-ADMIN-01', 'System Administrator Alpha', 'SYSTEM_ADMIN', '9999'),
       ('op-smt-01', 'OP-SMT-01', 'Operator Alpha (Feeder Specialist)', 'OPERATOR', '1234'),
       ('op-smt-02', 'OP-SMT-02', 'Operator Beta (Splicing Tech)', 'OPERATOR', '2345'),
-      ('sup-smt-01', 'SUP-SMT-01', 'Line Lead Alpha (SMT Line Leader)', 'SMT_SUPERVISOR', '9999'),
-      ('qa-smt-01', 'QA-SMT-01', 'Quality Lead Alpha (Quality Lead)', 'QUALITY_INSPECTOR', '8888')
+      ('sup-smt-01', 'SUP-SMT-01', 'Line Lead Alpha (SMT Line Leader)', 'LINE_LEAD', '9999'),
+      ('qa-smt-01', 'QA-SMT-01', 'Quality Lead Alpha (Quality Lead)', 'QUALITY_LEAD', '8888')
   `);
 
   await db.execute(`

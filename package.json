@@ -17,7 +17,8 @@
     "simulate:fuji": "tsx apps/api/src/adapters/fuji-simulator.ts",
     "package:exe": "node scripts/build-standalone.mjs",
     "doctor": "tsx scripts/mes-doctor.ts",
-    "check:hygiene": "bash scripts/check-entity-hygiene.sh"
+    "check:hygiene": "bash scripts/check-entity-hygiene.sh",
+    "soak": "NODE_OPTIONS=\"--expose-gc\" tsx scripts/soak-runner.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

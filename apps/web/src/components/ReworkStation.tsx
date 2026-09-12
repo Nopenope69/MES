@@ -5,6 +5,7 @@ import {
   Lock, CheckSquare, XCircle, Activity, UserCheck
 } from 'lucide-react';
 import { audioAlerts } from '../utils/audio-alerts';
+import { authService } from '../services/auth.service';
 
 type StationRole = 'TECHNICIAN' | 'SUPERVISOR' | 'ENGINEER';
 
@@ -125,7 +126,7 @@ export const ReworkStation: React.FC = () => {
   // Load panel and CAD data
   const loadPanelData = async () => {
     try {
-      const res = await fetch(`/api/v1/aoi/panels/${panelBarcode}`);
+      const res = await authService.authFetch(`/api/v1/aoi/panels/${panelBarcode}`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -158,7 +159,7 @@ export const ReworkStation: React.FC = () => {
 
   const loadCadData = async () => {
     try {
-      const res = await fetch('/api/v1/aoi/cad/PROG-SM-METER-TOP-REV4/4?boardSide=TOP');
+      const res = await authService.authFetch('/api/v1/aoi/cad/PROG-SM-METER-TOP-REV4/4?boardSide=TOP');
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
@@ -177,7 +178,7 @@ export const ReworkStation: React.FC = () => {
 
   const loadCorrelation = async () => {
     try {
-      const res = await fetch(`/api/v1/aoi/correlation/${panelBarcode}/${selectedUnit}/${selectedRefDes}`);
+      const res = await authService.authFetch(`/api/v1/aoi/correlation/${panelBarcode}/${selectedUnit}/${selectedRefDes}`);
       if (res.ok) {
         const json = await res.json();
         if (json.success) setCorrelation(json.data);
@@ -202,7 +203,7 @@ export const ReworkStation: React.FC = () => {
   const handleVerifyReplacement = async () => {
     setActionMessage(null);
     try {
-      const res = await fetch('/api/v1/aoi/rework/verify-replacement', {
+      const res = await authService.authFetch('/api/v1/aoi/rework/verify-replacement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -232,7 +233,7 @@ export const ReworkStation: React.FC = () => {
     const defectId = activeDefect ? activeDefect.id : 'defect-demo-01';
 
     try {
-      const res = await fetch('/api/v1/aoi/rework/execute', {
+      const res = await authService.authFetch('/api/v1/aoi/rework/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -267,7 +268,7 @@ export const ReworkStation: React.FC = () => {
     const defectId = activeDefect ? activeDefect.id : 'defect-demo-01';
 
     try {
-      const res = await fetch('/api/v1/aoi/post-rework-inspect', {
+      const res = await authService.authFetch('/api/v1/aoi/post-rework-inspect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -301,7 +302,7 @@ export const ReworkStation: React.FC = () => {
     const defectId = activeDefect ? activeDefect.id : 'defect-demo-01';
 
     try {
-      const res = await fetch('/api/v1/aoi/disposition', {
+      const res = await authService.authFetch('/api/v1/aoi/disposition', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -329,7 +330,7 @@ export const ReworkStation: React.FC = () => {
   // Handle Supervisor Clear Interlock
   const handleClearInterlock = async () => {
     try {
-      const res = await fetch('/api/v1/aoi/interlocks/clear', {
+      const res = await authService.authFetch('/api/v1/aoi/interlocks/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -37,6 +37,7 @@ dotenv.config();
 const app = express();
 const metrics = MetricsService.getInstance();
 const spliceRateLimiter = new SimpleRateLimiter(60000, 100);
+let fujiAdapter: FujiNeximAdapter | null = null;
 
 // Enterprise Security Hardening Middleware
 app.use(securityHeadersMiddleware);
@@ -272,6 +273,7 @@ async function bootstrap() {
     }
 
     // Start Fuji Nexim TCP Socket Gateway (Default Port 30040)
+    const PORT = parseInt(process.env.PORT || '4000', 10);
     const fujiPort = parseInt(process.env.FUJI_PORT || '30040', 10);
     fujiAdapter = new FujiNeximAdapter();
     fujiAdapter.startListener(fujiPort);
@@ -284,7 +286,9 @@ async function bootstrap() {
 
     const server = app.listen(PORT, () => {
       printBanner(PORT, fujiPort);
-      launchBrowser(`http://localhost:${PORT}`);
+      if (!process.env.CI && process.env.NODE_ENV !== 'test' && !process.env.HEADLESS) {
+        launchBrowser(`http://localhost:${PORT}`);
+      }
     });
 
     return server;

@@ -5,6 +5,7 @@ import {
   Radio, Clock, AlertTriangle, Disc
 } from 'lucide-react';
 import { STANDARD_DOWNTIME_REASONS } from '@mes/shared';
+import { authService } from '../services/auth.service';
 
 interface WorkCenter {
   id: string;
@@ -73,7 +74,7 @@ export const OperatorStation: React.FC = () => {
 
   const fetchWorkCenters = async () => {
     try {
-      const res = await fetch('/api/v1/work-centers');
+      const res = await authService.authFetch('/api/v1/work-centers');
       if (res.ok) setWorkCenters(await res.json());
     } catch (err) {
       console.error('Failed to load stations', err);
@@ -82,7 +83,7 @@ export const OperatorStation: React.FC = () => {
 
   const fetchFeeders = async () => {
     try {
-      const res = await fetch(`/api/v1/smt/feeders?workCenterId=${selectedWcId}`);
+      const res = await authService.authFetch(`/api/v1/smt/feeders?workCenterId=${selectedWcId}`);
       if (res.ok) {
         const data: FeederSlot[] = await res.json();
         setFeeders(data);
@@ -128,7 +129,7 @@ export const OperatorStation: React.FC = () => {
     await new Promise(r => setTimeout(r, 600));
 
     try {
-      const res = await fetch('/api/v1/smt/splice-verify', {
+      const res = await authService.authFetch('/api/v1/smt/splice-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -168,7 +169,7 @@ export const OperatorStation: React.FC = () => {
 
   const handleQuickStoppage = async (reasonCode: string, label: string) => {
     try {
-      await fetch('/api/v1/events', {
+      await authService.authFetch('/api/v1/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,7 +198,7 @@ export const OperatorStation: React.FC = () => {
 
   const handleResumeLine = async () => {
     try {
-      await fetch('/api/v1/events', {
+      await authService.authFetch('/api/v1/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
