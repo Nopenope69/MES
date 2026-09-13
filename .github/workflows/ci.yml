@@ -18,6 +18,21 @@ jobs:
       matrix:
         node-version: [20.x, 22.x]
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mes_user
+          POSTGRES_PASSWORD: mes_password
+          POSTGRES_DB: mes_clean_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -33,6 +48,11 @@ jobs:
 
       - name: TypeScript Build & Typecheck
         run: npm run build
+
+      - name: Clean DB Migration Gate (PostgreSQL 16)
+        env:
+          DATABASE_URL: postgres://mes_user:mes_password@localhost:5432/mes_clean_ci
+        run: npm run migrate
 
       - name: Run Vitest Automated Test Suite
         run: npm test
