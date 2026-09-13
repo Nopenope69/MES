@@ -20,7 +20,7 @@ export const DomainNav: React.FC<DomainNavProps> = ({
 }) => {
   return (
     <nav 
-      className="flex items-center gap-1.5 p-1 bg-[#0A0E13] rounded-xl border border-white/10 font-sans"
+      className="inline-flex items-center gap-0.5 p-0.5 bg-[#12151B] rounded-lg border border-white/[0.08] font-sans"
       role="tablist"
       aria-label="Operational Domains"
     >
@@ -37,19 +37,19 @@ export const DomainNav: React.FC<DomainNavProps> = ({
             aria-controls={`domain-panel-${domain.id}`}
             id={`domain-tab-${domain.id}`}
             onClick={() => onSelectDomain(domain.id)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-white/30 ${
               isActive
-                ? 'bg-[#1D2735] text-white font-bold border border-[#00E699]/40 shadow-sm'
-                : 'text-[#7A8A9E] hover:text-white hover:bg-white/5 border border-transparent'
+                ? 'bg-[#1C212B] text-white font-medium border border-white/[0.12] shadow-sm'
+                : 'text-[#8E95A2] hover:text-[#D1D5DB] hover:bg-white/[0.04] border border-transparent'
             }`}
           >
-            <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#00E699]' : 'text-[#7A8A9E]'}`} />
-            <span className="hidden sm:inline">{domain.label}</span>
-            <span className="sm:hidden">{domain.shortLabel}</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+            <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-[#6B7280]'}`} />
+            <span className="hidden sm:inline tracking-tight">{domain.label}</span>
+            <span className="sm:hidden tracking-tight">{domain.shortLabel}</span>
+            <span className={`text-[10px] font-mono px-1 py-0.2 rounded ${
               isActive 
-                ? 'bg-[#00E699]/20 text-[#00E699] font-bold' 
-                : 'bg-white/5 text-[#7A8A9E]'
+                ? 'bg-white/10 text-white' 
+                : 'text-[#525866]'
             }`}>
               {stationCount}
             </span>

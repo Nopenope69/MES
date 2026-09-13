@@ -44,7 +44,7 @@ export const StationNav: React.FC<StationNavProps> = ({
 
   return (
     <div 
-      className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none font-sans"
+      className="flex items-center gap-1 overflow-x-auto py-0.5 scrollbar-none font-sans"
       role="tablist"
       aria-label="Cleanroom Stations Sub-Navigation"
     >
@@ -60,26 +60,28 @@ export const StationNav: React.FC<StationNavProps> = ({
             aria-selected={isActive}
             aria-disabled={!allowed}
             onClick={() => onSelectTab(station.id)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono shrink-0 transition-all ${
+            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-mono shrink-0 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-white/30 ${
               isActive
-                ? 'bg-[#1D2735] text-[#00E699] font-bold border border-[#00E699]/40 shadow-sm'
+                ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.14]'
                 : allowed
-                  ? 'bg-[#10161F] text-[#7A8A9E] hover:text-white hover:bg-[#18222F] border border-white/5'
-                  : 'bg-[#0D1219] text-white/30 border border-white/5 cursor-pointer hover:bg-white/5'
+                  ? 'text-[#8E95A2] hover:text-white hover:bg-white/[0.03] border border-transparent'
+                  : 'text-white/30 border border-transparent hover:text-white/50 cursor-pointer'
             }`}
           >
             <Icon className={`w-3.5 h-3.5 ${
-              isActive ? 'text-[#00E699]' : allowed ? 'text-[#7A8A9E]' : 'text-white/30'
+              isActive ? 'text-white' : allowed ? 'text-[#6B7280]' : 'text-white/20'
             }`} />
             
-            <span className="text-[10px] text-[#7A8A9E] font-normal">
+            <span className="text-[10px] text-[#6B7280] font-normal">
               {station.code}
             </span>
 
-            <span>{station.shortLabel}</span>
+            <span className="font-sans text-xs font-medium tracking-tight">
+              {station.shortLabel}
+            </span>
 
             {!allowed && (
-              <span className="text-[9px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1 py-0.2 rounded flex items-center gap-0.5">
+              <span className="text-[9px] font-mono text-amber-300/80 bg-amber-500/10 border border-amber-500/20 px-1 py-0.2 rounded flex items-center gap-0.5">
                 <Lock className="w-2.5 h-2.5" />
                 <span>LOCK</span>
               </span>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X, Lock, Check, ArrowRight, CornerDownLeft } from 'lucide-react';
+import { Search, X, Lock, Check, CornerDownLeft } from 'lucide-react';
 import { 
   NavTab, 
   CANONICAL_STATION_ORDER, 
@@ -100,7 +100,6 @@ export const QuickStationSwitcher: React.FC<QuickStationSwitcherProps> = ({
   // Focus trap inside modal
   const handleDialogKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Tab') {
-      // Keep focus cycling between input and close button
       const focusable = [inputRef.current].filter(Boolean);
       if (focusable.length === 1 && document.activeElement === inputRef.current) {
         e.preventDefault();
@@ -112,19 +111,19 @@ export const QuickStationSwitcher: React.FC<QuickStationSwitcherProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4 bg-black/75 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Quick Station Switcher"
       onKeyDown={handleDialogKeyDown}
     >
       <div 
-        className="bg-[#10161F] border border-white/20 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col font-sans animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#12151C] border border-white/[0.12] rounded-xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col font-sans animate-in fade-in zoom-in-95 duration-100"
         onKeyDown={handleKeyDown}
       >
-        {/* Search Header */}
-        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/10 bg-[#0C1117]">
-          <Search className="w-5 h-5 text-[#7A8A9E]" />
+        {/* Search Input Bar */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.08] bg-[#0E1015]">
+          <Search className="w-4 h-4 text-[#6B7280] shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -133,8 +132,8 @@ export const QuickStationSwitcher: React.FC<QuickStationSwitcherProps> = ({
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
-            placeholder="Jump to station... (e.g., SPI, Paste, eDHR, OEE, Rework)"
-            className="flex-1 bg-transparent text-sm text-white placeholder-[#7A8A9E] focus:outline-none font-mono"
+            placeholder="Search instrument or station..."
+            className="flex-1 bg-transparent text-sm text-white placeholder-[#6B7280] focus:outline-none font-sans"
             aria-label="Search cleanroom stations"
           />
           {query && (
@@ -143,25 +142,25 @@ export const QuickStationSwitcher: React.FC<QuickStationSwitcherProps> = ({
                 setQuery('');
                 inputRef.current?.focus();
               }}
-              className="text-[#7A8A9E] hover:text-white p-1 rounded transition-all"
+              className="text-[#6B7280] hover:text-white p-1 rounded transition-colors"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
-          <span className="text-[10px] font-mono text-[#7A8A9E] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
+          <kbd className="text-[10px] font-mono text-[#6B7280] bg-white/[0.05] border border-white/[0.08] px-1.5 py-0.5 rounded">
             ESC
-          </span>
+          </kbd>
         </div>
 
         {/* Station Results List */}
         <div 
           ref={listRef} 
-          className="max-h-80 overflow-y-auto p-2 flex flex-col gap-1 focus:outline-none"
+          className="max-h-80 overflow-y-auto p-1.5 flex flex-col gap-0.5 focus:outline-none"
           role="listbox"
         >
           {filteredStations.length === 0 ? (
-            <div className="p-8 text-center text-[#7A8A9E] font-mono text-xs">
-              No matching stations found for "{query}"
+            <div className="p-8 text-center text-[#6B7280] font-mono text-xs">
+              No stations match "{query}"
             </div>
           ) : (
             filteredStations.map((item, index) => {
@@ -181,48 +180,48 @@ export const QuickStationSwitcher: React.FC<QuickStationSwitcherProps> = ({
                     }
                   }}
                   onMouseEnter={() => setSelectedIndex(index)}
-                  className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer font-sans ${
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors cursor-pointer ${
                     isSelected
                       ? item.allowed 
-                        ? 'bg-[#1D2735] text-white border border-[#00E699]/40' 
-                        : 'bg-white/5 text-white/50 border border-white/10 cursor-not-allowed'
-                      : 'text-white/80 hover:bg-white/5 border border-transparent'
+                        ? 'bg-white/[0.08] text-white border border-white/[0.12]' 
+                        : 'bg-white/[0.02] text-white/40 border border-transparent cursor-not-allowed'
+                      : 'text-[#D1D5DB] hover:bg-white/[0.04] border border-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-mono text-[#00E699] font-bold bg-[#00E699]/10 border border-[#00E699]/30 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-mono font-medium text-[#9CA3AF] bg-white/[0.05] border border-white/[0.08] px-1.5 py-0.5 rounded">
                       {item.station.code}
                     </span>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white tracking-tight">
+                        <span className="text-xs font-semibold text-white tracking-tight">
                           {item.station.label}
                         </span>
                         {isActive && (
-                          <span className="text-[9px] font-mono text-[#00E699] bg-[#00E699]/10 px-1.5 py-0.2 rounded border border-[#00E699]/30 flex items-center gap-1">
+                          <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20 flex items-center gap-1">
                             <Check className="w-2.5 h-2.5" />
-                            ACTIVE
+                            CURRENT
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-[#7A8A9E] mt-0.5">
+                      <p className="text-[11px] text-[#6B7280] mt-0.5">
                         {item.station.description}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-[#7A8A9E]">
+                    <span className="text-[10px] text-[#6B7280]">
                       {item.domain?.shortLabel}
                     </span>
                     {!item.allowed ? (
-                      <span className="text-[10px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span className="text-[10px] font-mono text-amber-300/80 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Lock className="w-3 h-3" />
-                        <span>REQUIRES {item.station.requiredRoles[0]}</span>
+                        <span>Requires {item.station.requiredRoles[0]}</span>
                       </span>
                     ) : isSelected ? (
-                      <span className="text-[10px] font-mono text-[#00E699] flex items-center gap-1">
-                        <span>SELECT</span>
+                      <span className="text-[10px] font-mono text-white/60 flex items-center gap-1">
+                        <span>Navigate</span>
                         <CornerDownLeft className="w-3 h-3" />
                       </span>
                     ) : null}
@@ -233,8 +232,8 @@ export const QuickStationSwitcher: React.FC<QuickStationSwitcherProps> = ({
           )}
         </div>
 
-        {/* Footer Hotkey Guidance */}
-        <div className="flex items-center justify-between px-4 py-2.5 bg-[#0C1117] border-t border-white/10 text-[11px] font-mono text-[#7A8A9E]">
+        {/* Footer */}
+        <div className="flex items-center justify-between px-4 py-2 bg-[#0E1015] border-t border-white/[0.08] text-[10px] font-mono text-[#6B7280]">
           <div className="flex items-center gap-3">
             <span>↑↓ Navigate</span>
             <span>↵ Select</span>
