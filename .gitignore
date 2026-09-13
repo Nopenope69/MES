@@ -46,3 +46,6 @@ test-results/
 playwright-report/
 backups/
 diagnostics/
+*.pem
+drift-challenge.json
+config/license.json
