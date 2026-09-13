@@ -165,6 +165,7 @@ export class ProductionHoldService {
   public static async acknowledgeProductionHold(params: {
     holdId?: string;
     lineId?: string;
+    workCenterId?: string;
     acknowledgedBy: string;
     acknowledgedByName?: string;
     role: string;
@@ -188,6 +189,12 @@ export class ProductionHoldService {
       const rows = await db.query<any>(
         'SELECT * FROM production_line_holds WHERE line_id = ? AND status = ? ORDER BY tripped_at DESC LIMIT 1',
         [params.lineId, 'HOLD_ACTIVE']
+      );
+      if (rows.length > 0) hold = rows[0];
+    } else if (params.workCenterId) {
+      const rows = await db.query<any>(
+        'SELECT * FROM production_line_holds WHERE work_center_id = ? AND status = ? ORDER BY tripped_at DESC LIMIT 1',
+        [params.workCenterId, 'HOLD_ACTIVE']
       );
       if (rows.length > 0) hold = rows[0];
     } else {

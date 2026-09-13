@@ -11,27 +11,49 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ISA-95 Physical Asset Hierarchy Master Data
 -- ============================================================================
 
+CREATE TABLE IF NOT EXISTS organizations (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS sites (
   id TEXT PRIMARY KEY,
-  site_code TEXT UNIQUE NOT NULL,
+  organization_id TEXT REFERENCES organizations(id) ON DELETE CASCADE,
+  code TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
+  location TEXT,
+  timezone TEXT DEFAULT 'Asia/Kolkata',
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS areas (
   id TEXT PRIMARY KEY,
   site_id TEXT REFERENCES sites(id) ON DELETE CASCADE,
-  area_code TEXT UNIQUE NOT NULL,
+  code TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'SMT_CLEANROOM',
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_areas_site_id ON areas(site_id);
 
+CREATE TABLE IF NOT EXISTS production_lines (
+  id TEXT PRIMARY KEY,
+  area_id TEXT REFERENCES areas(id) ON DELETE CASCADE,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_production_lines_area ON production_lines(area_id);
+
 CREATE TABLE IF NOT EXISTS work_centers (
   id TEXT PRIMARY KEY,
   area_id TEXT REFERENCES areas(id) ON DELETE CASCADE,
-  work_center_code TEXT UNIQUE NOT NULL,
+  line_id TEXT REFERENCES production_lines(id) ON DELETE SET NULL,
+  code TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   equipment_type TEXT NOT NULL DEFAULT 'SMT_PLACEMENT',
   current_state TEXT NOT NULL DEFAULT 'IDLE',
@@ -41,6 +63,74 @@ CREATE TABLE IF NOT EXISTS work_centers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_work_centers_area_id ON work_centers(area_id);
+
+CREATE TABLE IF NOT EXISTS equipment_units (
+  id TEXT PRIMARY KEY,
+  work_center_id TEXT NOT NULL REFERENCES work_centers(id) ON DELETE CASCADE,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  uom TEXT NOT NULL DEFAULT 'PANEL',
+  category TEXT NOT NULL DEFAULT 'SMT_ASSEMBLY'
+);
+
+CREATE TABLE IF NOT EXISTS recipes (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  product_code TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  name TEXT NOT NULL,
+  target_cycle_time_minutes INTEGER NOT NULL DEFAULT 1,
+  panels_per_job INTEGER NOT NULL DEFAULT 100
+);
+
+CREATE TABLE IF NOT EXISTS recipe_items (
+  id TEXT PRIMARY KEY,
+  recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  material_code TEXT NOT NULL,
+  material_name TEXT NOT NULL,
+  planned_quantity DECIMAL(12, 3) NOT NULL,
+  unit TEXT NOT NULL DEFAULT 'PCS',
+  tolerance_percentage DECIMAL(5, 2) NOT NULL DEFAULT 0.0,
+  step_order INTEGER NOT NULL DEFAULT 1,
+  module_no INTEGER DEFAULT 1,
+  stage_no INTEGER DEFAULT 1,
+  slot_no INTEGER NOT NULL,
+  sub_slot_no INTEGER DEFAULT 0,
+  package_type TEXT DEFAULT '0402',
+  reference_designators TEXT
+);
+
+CREATE TABLE IF NOT EXISTS operators (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'OPERATOR',
+  pin TEXT,
+  pin_hash TEXT,
+  failed_login_attempts INTEGER DEFAULT 0,
+  locked_until TIMESTAMPTZ,
+  status TEXT DEFAULT 'ACTIVE',
+  last_login_at TIMESTAMPTZ,
+  authz_version INTEGER DEFAULT 1,
+  organization_id TEXT DEFAULT 'org-default',
+  site_id TEXT DEFAULT 'site-default'
+);
+
+CREATE TABLE IF NOT EXISTS shifts (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL
+);
 
 -- ============================================================================
 -- High-Throughput Event Ingress & Event Sourcing (Range Partitioned)
@@ -130,10 +220,16 @@ CREATE TABLE IF NOT EXISTS component_reels (
   id TEXT PRIMARY KEY,
   reel_id TEXT UNIQUE NOT NULL,
   part_number TEXT NOT NULL,
+  part_name TEXT NOT NULL DEFAULT '',
+  supplier_name TEXT NOT NULL DEFAULT '',
+  supplier TEXT DEFAULT '',
   lot_number TEXT NOT NULL,
-  supplier TEXT NOT NULL,
+  date_code TEXT DEFAULT '20260101',
   initial_quantity NUMERIC(12, 3) NOT NULL,
+  current_quantity NUMERIC(12, 3) DEFAULT 0,
   remaining_quantity NUMERIC(12, 3) NOT NULL,
+  quantity_remaining NUMERIC(12, 3) DEFAULT 0,
+  unit TEXT NOT NULL DEFAULT 'PCS',
   msl_level TEXT NOT NULL DEFAULT '1',
   msl_package_type TEXT NOT NULL DEFAULT 'SMD',
   initial_floor_life_seconds BIGINT NOT NULL DEFAULT 0,

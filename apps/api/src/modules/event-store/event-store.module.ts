@@ -64,6 +64,13 @@ export class EventStoreModule implements IEventStoreModule {
       }
     }
 
+    let sequenceId = rawEvent.sequenceId;
+    if (sequenceId === undefined || sequenceId === null) {
+      const maxSeqRes = await db.query<any>('SELECT COALESCE(MAX(sequence_id), 0) as max_seq FROM production_events');
+      const maxSeq = Number(maxSeqRes[0]?.max_seq ?? 0);
+      sequenceId = maxSeq + 1;
+    }
+
     const envelope: MesEventEnvelope = {
       eventId: rawEvent.eventId || uuidv4(),
       eventType: rawEvent.eventType!,
@@ -72,7 +79,7 @@ export class EventStoreModule implements IEventStoreModule {
       receivedTime: now,
       sourceType: rawEvent.sourceType || 'MANUAL_UI',
       sourceId: rawEvent.sourceId || 'system-ui',
-      sequenceId: rawEvent.sequenceId || Date.now(),
+      sequenceId,
       siteId: rawEvent.siteId || 'SITE-NOIDA-P4',
       workCenterId: rawEvent.workCenterId || 'wc-line1',
       assetPath,

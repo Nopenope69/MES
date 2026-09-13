@@ -153,8 +153,45 @@ class NodeSqliteDatabase implements IDatabase {
     return { changes: Number(info.changes), lastInsertRowid: Number(info.lastInsertRowid) };
   }
 
+  private sanitizeSqlForSqlite(script: string): string {
+    const noComments = script.replace(/--.*$/gm, '');
+    const statements = noComments
+      .split(';')
+      .map(stmt => stmt.trim())
+      .filter(stmt => {
+        if (!stmt) return false;
+        if (/^CREATE\s+EXTENSION/i.test(stmt)) return false;
+        if (/PARTITION\s+OF/i.test(stmt)) return false;
+        return true;
+      })
+      .map(stmt => {
+        let clean = stmt.replace(/\s+USING\s+(brin|gin)\s*/gi, ' ');
+        clean = clean.replace(/PARTITION\s+BY\s+RANGE\s*\([^\)]+\)/gi, '');
+        const alterMatch = clean.match(/ALTER\s+TABLE\s+([^\s]+)\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+([^\s]+)(.*)/i);
+        if (alterMatch) {
+          const [, table, col, rest] = alterMatch;
+          try {
+            const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as any[];
+            if (cols.some((c: any) => c.name.toLowerCase() === col.toLowerCase())) {
+              return '';
+            }
+          } catch {
+            // Table might not exist yet or PRAGMA failed
+          }
+          return `ALTER TABLE ${table} ADD COLUMN ${col}${rest}`;
+        }
+        return clean;
+      })
+      .filter(Boolean);
+
+    return statements.length > 0 ? statements.join(';\n') + ';' : '';
+  }
+
   async execScript(sqlScript: string): Promise<void> {
-    this.db.exec(sqlScript);
+    const sanitized = this.sanitizeSqlForSqlite(sqlScript);
+    if (sanitized.trim()) {
+      this.db.exec(sanitized);
+    }
   }
 
   async close(): Promise<void> {

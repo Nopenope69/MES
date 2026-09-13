@@ -820,5 +820,9 @@ export class FujiNeximAdapter implements IFactoryIntegrationAdapter, IControllab
       framesProcessedTotal: this.framesProcessedTotal
     };
   }
+
+  public isListening(): boolean {
+    return !!(this.server && this.server.listening);
+  }
 }
 

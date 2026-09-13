@@ -29,10 +29,10 @@ const FOREIGN_KEY_CHECKS: ForeignKeyCheck[] = [
   { childTable: 'rework_events', childColumn: 'defect_id', parentTable: 'aoi_defects', parentColumn: 'id' },
   { childTable: 'spi_inspections', childColumn: 'work_center_id', parentTable: 'work_centers', parentColumn: 'id' },
   { childTable: 'spi_pad_measurements', childColumn: 'inspection_id', parentTable: 'spi_inspections', parentColumn: 'id' },
-  { childTable: 'stencil_sessions', childColumn: 'stencil_id', parentTable: 'stencils', parentColumn: 'id' },
+  { childTable: 'stencil_sessions', childColumn: 'stencil_id', parentTable: 'stencils', parentColumn: 'stencil_id' },
   { childTable: 'stencil_sessions', childColumn: 'work_center_id', parentTable: 'work_centers', parentColumn: 'id' },
   { childTable: 'stencil_paste_loads', childColumn: 'stencil_session_id', parentTable: 'stencil_sessions', parentColumn: 'id' },
-  { childTable: 'stencil_paste_loads', childColumn: 'paste_jar_id', parentTable: 'solder_paste_jars', parentColumn: 'id' },
+  { childTable: 'stencil_paste_loads', childColumn: 'paste_jar_id', parentTable: 'solder_paste_jars', parentColumn: 'jar_id' },
   { childTable: 'solder_paste_jars', childColumn: 'profile_id', parentTable: 'solder_paste_profiles', parentColumn: 'id' },
   { childTable: 'smt_feeder_slots', childColumn: 'work_center_id', parentTable: 'work_centers', parentColumn: 'id' },
   { childTable: 'refresh_tokens', childColumn: 'operator_id', parentTable: 'operators', parentColumn: 'id' }

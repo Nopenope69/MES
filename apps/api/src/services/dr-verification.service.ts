@@ -92,7 +92,7 @@ export class DrVerificationService {
     let eventStoreValid = true;
     try {
       const seqRows = await db.query<any>(
-        'SELECT sequence_id, event_time, id FROM production_events WHERE sequence_id IS NOT NULL ORDER BY rowid ASC'
+        'SELECT sequence_id, event_time, id FROM production_events WHERE sequence_id IS NOT NULL ORDER BY sequence_id ASC, id ASC'
       );
       if (seqRows.length > 0) {
         for (let i = 0; i < seqRows.length; i++) {
@@ -116,7 +116,7 @@ export class DrVerificationService {
       // Check event_time monotonicity across events
       if (eventStoreValid) {
         const timeRows = await db.query<any>(
-          'SELECT event_time, id FROM production_events ORDER BY rowid ASC'
+          'SELECT event_time, id FROM production_events ORDER BY event_time ASC, id ASC'
         );
         let prevTime = 0;
         for (const row of timeRows) {

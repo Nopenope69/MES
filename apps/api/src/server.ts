@@ -23,13 +23,14 @@ import { reflowRouter } from './routes/reflow.router';
 import { MetricsService } from './services/metrics.service';
 import { FujiNeximAdapter } from './adapters/fuji-nexim.adapter';
 import { MachineControlModule } from './modules/machine-control';
-import { RepeatDefectSentinelService } from './services/repeat-defect-sentinel.service';
-import { securityHeadersMiddleware, SimpleRateLimiter } from './security/http-security';
+import { securityHeadersMiddleware, SimpleRateLimiter, timingSafeCompare } from './security/http-security';
 import { SecretsConfigManager } from './config/secrets';
 import { authRouter } from './routes/auth.router';
+import { healthRouter, setFujiAdapterForHealth } from './routes/health.router';
 import { authenticateToken, requirePermission } from './middleware/auth.middleware';
 import { Permission } from './security/permissions';
 import { OnboardingService } from './services/onboarding.service';
+import { RepeatDefectSentinelService } from './services/repeat-defect-sentinel.service';
 import { featureGate } from './middleware/feature-gate.middleware';
 
 dotenv.config();
@@ -130,8 +131,25 @@ app.use('/api/v1/predictive', predictiveRouter);
 
 app.use('/api/v1/reflow', reflowRouter);
 
-// Prometheus Metrics Endpoint
-app.get('/metrics', (_req, res) => {
+// Prometheus Metrics Endpoint (Secured via dedicated Prometheus service token when configured)
+app.get('/metrics', (req, res) => {
+  const expectedToken = process.env.PROMETHEUS_METRICS_KEY || process.env.PROMETHEUS_TOKEN;
+  if (expectedToken) {
+    const authHeader = req.headers.authorization;
+    const apiKey = req.headers['x-api-key'];
+    let providedToken = '';
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      providedToken = authHeader.substring(7).trim();
+    } else if (typeof apiKey === 'string') {
+      providedToken = apiKey.trim();
+    }
+
+    if (!providedToken || !timingSafeCompare(providedToken, expectedToken)) {
+      res.status(401).json({ error: 'UNAUTHORIZED', message: 'Valid Prometheus service token required' });
+      return;
+    }
+  }
+
   res.setHeader('Content-Type', 'text/plain; version=0.0.4');
   res.send(metrics.getPrometheusMetrics());
 });
@@ -172,15 +190,8 @@ app.get('/api/v1/security/audit', requirePermission(Permission.SECURITY_ADMIN), 
   });
 });
 
-// Health check (public allowlist)
-app.get(['/health', '/api/health'], (_req, res) => {
-  res.json({
-    status: 'HEALTHY',
-    system: 'Antigravity SMT MES Engine',
-    timestamp: new Date().toISOString(),
-    version: '0.2.0-smt'
-  });
-});
+// Deep Health check & readiness probes (public allowlist)
+app.use(['/health', '/api/health', '/api/v1/health'], healthRouter);
 
 // Static frontend serving if public/dist folder exists
 const possiblePublicDirs = [
@@ -277,10 +288,11 @@ async function bootstrap() {
     const fujiPort = parseInt(process.env.FUJI_PORT || '30040', 10);
     fujiAdapter = new FujiNeximAdapter();
     fujiAdapter.startListener(fujiPort);
+    setFujiAdapterForHealth(fujiAdapter);
     MachineControlModule.getInstance().registerAdapter(fujiAdapter);
 
     RepeatDefectSentinelService.registerFujiCommander(
-      (reason) => fujiAdapter?.tripProductionHold(reason) ?? Promise.resolve(),
+      (reason: string) => fujiAdapter?.tripProductionHold(reason) ?? Promise.resolve(),
       () => fujiAdapter?.clearProductionHold() ?? Promise.resolve()
     );
 
