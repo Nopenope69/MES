@@ -175,7 +175,9 @@ async function runSoakTest(): Promise<boolean> {
 
   // Initialize DB & Seed Baseline
   process.env.NODE_ENV = 'test';
-  process.env.DATABASE_URL = ':memory:';
+  if (!process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = ':memory:';
+  }
   await initDatabase();
   await seedDatabase();
 

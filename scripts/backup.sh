@@ -32,7 +32,7 @@ DB_FILE_NAME="database.sqlite"
 if [ -n "${DATABASE_URL:-}" ] && [[ "$DATABASE_URL" =~ ^postgres ]]; then
   DB_FILE_NAME="database.sql"
   echo "[BACKUP] Dumping PostgreSQL database..."
-  pg_dump "$DATABASE_URL" > "${STAGING_DIR}/${DB_FILE_NAME}"
+  pg_dump --clean --if-exists --no-owner --no-privileges "$DATABASE_URL" > "${STAGING_DIR}/${DB_FILE_NAME}"
 elif [ -f "$DB_PATH" ]; then
   echo "[BACKUP] Snapshotting SQLite database from ${DB_PATH}..."
   if command -v sqlite3 >/dev/null 2>&1; then

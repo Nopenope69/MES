@@ -54,6 +54,22 @@ jobs:
           DATABASE_URL: postgres://mes_user:mes_password@localhost:5432/mes_clean_ci
         run: npm run migrate
 
+      - name: Seed Database for Cleanroom Validation (PostgreSQL 16)
+        env:
+          DATABASE_URL: postgres://mes_user:mes_password@localhost:5432/mes_clean_ci
+        run: npm run seed
+
+      - name: Ensure PostgreSQL Client Utilities
+        run: which psql >/dev/null 2>&1 && which pg_dump >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+
+      - name: Automated Disaster Recovery Drill (PostgreSQL 16 Continuous Verification)
+        env:
+          DATABASE_URL: postgres://mes_user:mes_password@localhost:5432/mes_clean_ci
+        run: npm run dr:drill
+
+      - name: Stage 4 Concurrency & Quick Soak Gate (Gate G-11)
+        run: npm run soak:quick
+
       - name: Run Vitest Automated Test Suite
         run: npm test
 

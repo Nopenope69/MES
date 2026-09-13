@@ -147,8 +147,21 @@ if [ -f "$STAGING_ROOT/database.sqlite" ]; then
   echo "[RESTORE] Restoring SQLite database to ${TARGET_DB_PATH}..."
   cp "$STAGING_ROOT/database.sqlite" "$TARGET_DB_PATH"
 elif [ -f "$STAGING_ROOT/database.sql" ]; then
-  echo "[RESTORE] PostgreSQL database dump restored to ${RESTORE_DIR}/database.sql"
+  echo "[RESTORE] PostgreSQL database dump found in recovery archive."
   cp "$STAGING_ROOT/database.sql" "$RESTORE_DIR/database.sql"
+
+  RESTORE_PG_URL="${TARGET_DATABASE_URL:-${DATABASE_URL:-}}"
+  if [ -n "$RESTORE_PG_URL" ] && [[ "$RESTORE_PG_URL" =~ ^postgres ]]; then
+    echo "[RESTORE] Applying PostgreSQL dump to target database..."
+    if command -v psql >/dev/null 2>&1; then
+      psql "$RESTORE_PG_URL" -v ON_ERROR_STOP=1 < "$STAGING_ROOT/database.sql"
+      echo "[RESTORE] PostgreSQL database dump successfully applied via psql."
+    else
+      echo "[RESTORE] WARNING: psql command not found in PATH; dump preserved at ${RESTORE_DIR}/database.sql"
+    fi
+  else
+    echo "[RESTORE] Target is not PostgreSQL; dump preserved at ${RESTORE_DIR}/database.sql"
+  fi
 fi
 
 # Restore Managed Artifacts

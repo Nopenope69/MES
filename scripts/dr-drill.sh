@@ -43,22 +43,39 @@ echo "[DR-DRILL] Unpack & SHA-256 digest verification passed."
 
 # Stage 3: Execute Full DR Verification Service
 echo -e "\n--- [Stage 3/3] Executing DrVerificationService Pipeline ---"
-export SQLITE_DB_PATH="$RESTORE_DB_PATH"
+
+IS_POSTGRES=false
+if [ -n "${DATABASE_URL:-}" ] && [[ "$DATABASE_URL" =~ ^postgres ]]; then
+  IS_POSTGRES=true
+  DB_TARGET="$DATABASE_URL"
+  echo "[DR-DRILL] Engine detected: PostgreSQL (${DATABASE_URL%%@*})"
+else
+  DB_TARGET="$RESTORE_DB_PATH"
+  export SQLITE_DB_PATH="$RESTORE_DB_PATH"
+  echo "[DR-DRILL] Engine detected: SQLite (${RESTORE_DB_PATH})"
+fi
 export DATA_DIR="$RESTORE_DATA_DIR"
 
-npx tsx - "$REPO_ROOT" "$RESTORE_DB_PATH" "$RESTORE_DATA_DIR" "$DRILL_START_ISO" << 'PYEOF'
+npx tsx - "$REPO_ROOT" "$DB_TARGET" "$RESTORE_DATA_DIR" "$DRILL_START_ISO" "$IS_POSTGRES" << 'PYEOF'
 const path = require('path');
 
 async function run() {
   const repoRoot = process.argv[2];
-  const dbPath = process.argv[3];
+  const dbTarget = process.argv[3];
   const dataDir = process.argv[4];
   const startIso = process.argv[5];
+  const isPostgres = process.argv[6] === 'true';
 
-  process.env.SQLITE_DB_PATH = dbPath;
+  if (isPostgres) {
+    process.env.DATABASE_URL = dbTarget;
+    delete process.env.SQLITE_DB_PATH;
+  } else {
+    delete process.env.DATABASE_URL;
+    process.env.SQLITE_DB_PATH = dbTarget;
+  }
   process.env.DATA_DIR = dataDir;
 
-  // Use tsx to dynamically load DrVerificationService
+  // Dynamically load database and DrVerificationService
   const { initDatabase } = await import(path.join(repoRoot, 'apps/api/src/db/database.ts'));
   const { DrVerificationService } = await import(path.join(repoRoot, 'apps/api/src/services/dr-verification.service.ts'));
 
@@ -78,7 +95,8 @@ async function run() {
     process.exit(1);
   }
 
-  console.log('\n[DR-DRILL] ✅ DRILL PASSED: RPO and RTO within SLA, 100% integrity verified.');
+  const engineName = isPostgres ? 'PostgreSQL 16' : 'Node SQLite (WAL)';
+  console.log(`\n[DR-DRILL] ✅ DRILL PASSED [${engineName}]: RPO=${report.RPOSeconds}s, RTO=${report.RTOSeconds}s (SLA ≤ 180s), 100% cryptographic integrity verified.`);
 }
 
 run().catch(err => {

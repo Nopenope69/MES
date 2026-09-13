@@ -15,7 +15,109 @@ describe('Resilience & Mid-Transaction Kill Verification Suite (Stage 4 / Gate G
     await seedDatabase();
   });
 
-  it('1. Mid-Transaction Abrupt Failure: guarantees zero partial writes and clean rollback', async () => {
+  it('1. Real OS SIGKILL Mid-Transaction: process terminated via SIGKILL guarantees zero partial writes and clean WAL rollback', async () => {
+    const fs = await import('fs');
+    const os = await import('os');
+    const path = await import('path');
+    const { spawn } = await import('child_process');
+
+    const testPanelBarcode = 'PNL-REAL-SIGKILL-' + Date.now();
+    const workerScript = path.resolve(__dirname, 'fixtures/sigkill-worker.ts');
+    const tsxCli = path.resolve(__dirname, '../../../node_modules/tsx/dist/cli.mjs');
+
+    // Create a dedicated disk-backed SQLite database (or use DATABASE_URL if Postgres)
+    const isPostgres = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgres'));
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mes-sigkill-test-'));
+    const testDbPath = path.join(tempDir, 'sigkill-journal-test.db');
+
+    const workerEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      NODE_ENV: 'test',
+      SQLITE_DB_PATH: isPostgres ? undefined : testDbPath,
+      DATABASE_URL: isPostgres ? process.env.DATABASE_URL : undefined
+    };
+
+    // Pre-initialize SQLite WAL mode
+    if (!isPostgres) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const sqliteModule = require('node:sqlite');
+      const seedDb = new sqliteModule.DatabaseSync(testDbPath);
+      seedDb.exec('PRAGMA journal_mode = WAL;');
+      seedDb.close();
+    }
+
+    // Spawn child worker process
+    const child = spawn(process.execPath, [tsxCli, workerScript, testPanelBarcode], {
+      env: workerEnv,
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+    });
+
+    let stdoutData = '';
+    let stderrData = '';
+    const inFlightPromise = new Promise<void>((resolve, reject) => {
+      child.stdout?.on('data', (chunk) => {
+        stdoutData += chunk.toString();
+        if (stdoutData.includes('TRANSACTION_IN_FLIGHT')) {
+          resolve();
+        }
+      });
+      child.stderr?.on('data', (chunk) => {
+        stderrData += chunk.toString();
+      });
+      child.on('error', reject);
+      child.on('exit', (code, sig) => {
+        if (!stdoutData.includes('TRANSACTION_IN_FLIGHT')) {
+          reject(new Error(`Worker exited prematurely before in-flight write (code=${code}, sig=${sig}). Stderr: ${stderrData}`));
+        }
+      });
+    });
+
+    // Wait for the worker to execute uncommitted writes
+    await inFlightPromise;
+
+    // Send SIGKILL (Signal 9) - abrupt kernel termination with NO JS cleanup or finally blocks
+    const exitPromise = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
+      child.on('exit', (code, signal) => resolve({ code, signal }));
+    });
+
+    child.kill('SIGKILL');
+    const exitResult = await exitPromise;
+
+    // Verify process was killed by SIGKILL
+    expect(exitResult.signal).toBe('SIGKILL');
+
+    // Allow OS kernel to finalize releasing POSIX file descriptor locks
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Now open a fresh database connection to verify WAL recovery / rollback
+    if (isPostgres) {
+      const db = getDatabase();
+      const rows = await db.query('SELECT * FROM panel_checkouts WHERE panel_barcode = ?', [testPanelBarcode]);
+      expect(rows.length).toBe(0);
+      const unitRows = await db.query('SELECT * FROM panel_units WHERE panel_barcode = ?', [testPanelBarcode]);
+      expect(unitRows.length).toBe(0);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const sqliteModule = require('node:sqlite');
+      const verifyDb = new sqliteModule.DatabaseSync(testDbPath);
+      verifyDb.exec('PRAGMA busy_timeout = 5000;');
+      // Run integrity check on database
+      const integrityRows = verifyDb.prepare('PRAGMA integrity_check;').all() as any[];
+      expect(integrityRows[0].integrity_check).toBe('ok');
+
+      // Verify zero partial rows exist
+      const panelRows = verifyDb.prepare('SELECT * FROM panel_checkouts WHERE panel_barcode = ?').all(testPanelBarcode);
+      expect(panelRows.length).toBe(0);
+
+      const unitRows = verifyDb.prepare('SELECT * FROM panel_units WHERE panel_barcode = ?').all(testPanelBarcode);
+      expect(unitRows.length).toBe(0);
+
+      verifyDb.close();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('2. In-Process Exception Abrupt Failure: application-level exception triggers complete rollback', async () => {
     const db = getDatabase();
     const testPanelBarcode = 'PNL-RESILIENCE-TEST-001';
 
@@ -41,11 +143,11 @@ describe('Resilience & Mid-Transaction Kill Verification Suite (Stage 4 / Gate G
           ['unit-res-01', testPanelBarcode, 1, 'SN-RES-01', 'PASS']
         );
 
-        // Step 3: Simulate abrupt network kill / process crash / uncaught exception mid-transaction
-        throw new Error('SIMULATED_PROCESS_KILL_SIGKILL_MID_TRANSACTION');
+        // Step 3: Simulate abrupt application exception mid-transaction
+        throw new Error('APPLICATION_EXCEPTION_MID_TRANSACTION');
       });
     } catch (err: any) {
-      if (err.message === 'SIMULATED_PROCESS_KILL_SIGKILL_MID_TRANSACTION') {
+      if (err.message === 'APPLICATION_EXCEPTION_MID_TRANSACTION') {
         errorCaught = true;
       } else {
         throw err;

@@ -19,7 +19,9 @@
     "package:exe": "node scripts/build-standalone.mjs",
     "doctor": "tsx scripts/mes-doctor.ts",
     "check:hygiene": "bash scripts/check-entity-hygiene.sh",
-    "soak": "NODE_OPTIONS=\"--expose-gc\" tsx scripts/soak-runner.ts"
+    "soak": "NODE_OPTIONS=\"--expose-gc\" tsx scripts/soak-runner.ts",
+    "soak:quick": "NODE_OPTIONS=\"--expose-gc\" tsx scripts/soak-runner.ts --quick",
+    "dr:drill": "bash scripts/dr-drill.sh"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

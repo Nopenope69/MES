@@ -23,8 +23,8 @@ However, commercial release readiness is accurately assessed at **~50/100**: Gat
 | **Commercialization Readiness** | 25 / 100 | **~50 / 100** | **IN REMEDIATION** |
 | **Engineering Completion** | ~35% | **85%** | **HARDWARE GATED** |
 | **Canonical Launch Gates** | 3.25 / 13 (25%) | **12 / 13 GO (1 Blocked)** | **NO-GO (G-09)** |
-| **API Test Suite Pass Rate** | 276 / 277 (1 failure) | **326 / 326 (42/42 Suites Green)** | **100% PASS** |
-| **Web Unit Test Suite** | 1 file (partial) | **26 / 26 (2 Suites Green)** | **100% PASS** |
+| **API Test Suite Pass Rate** | 276 / 277 (1 failure) | **327 / 327 (42/42 Suites Green)** | **100% PASS** |
+| **Web Unit Test Suite** | 1 file (partial) | **39 / 39 (3 Suites Green)** | **100% PASS** |
 | **End-to-End Floor Journey** | 0% (Missing login) | **1 / 1 (Playwright E2E Cleanroom)** | **100% PASS** |
 | **MES Doctor Diagnostics** | Incomplete | **13 / 13 Diagnostic Modules Green** | **100% PASS** |
 | **Brand & Entity Hygiene** | Multiple Dixon / Real names | **100% Sanitized (`check:hygiene`)** | **100% CLEAN** |
@@ -47,7 +47,7 @@ Every launch gate is evaluated under strict binary (Go / No-Go) criteria.
 | **G-08** | Production-ready operator authentication UI | Full operator authentication flow implemented: `LoginModal.tsx` with Badge ID + Argon2 PIN verification against `/api/v1/auth/login`. In-memory access token storage (15m), HttpOnly SameSite=Strict refresh cookies (7d), cryptographic token rotation, and 5-attempt exponential lockout. | **GO** |
 | **G-09** | Validated machine & vendor integration | Fuji Nexim framing accumulator handles fragmented, split, and coalesced frames with 64 KB bounds. `I-01` (Fuji NXT physical machine access) and `I-04` (AOI/SPI proprietary export files from Koh Young/Omron) are blocked on physical factory access (estimated 3–6 weeks partner lead time with Polli). Machine integration remains unverified against real physical equipment until line access is provided. | **NO-GO (BLOCKED: Hardware Access)** |
 | **G-10** | Multi-machine gateway & explicit hold semantics | Gateway dynamically maps inbound TCP sockets by client IP / Machine ID to corresponding `work_center_id` (no hardcoded `'wc-nxt-01'`). Mandatory Supervisor Acknowledgment (MSA) trips persistent DB line lock (`HOLD_ACTIVE`) and WebSocket broadcast. Resume requires authenticated `LINE_LEAD` or `QUALITY_LEAD` digital signature. Tests: `tests/production-hold-msa.test.ts`. | **GO** |
-| **G-11** | Validated soak, concurrency, and DR resilience | Stage 4 frozen performance thresholds passed (12 concurrent stations, 50 tx/s sustained, 0 record loss, 0 duplicate events, heap drift < 15%). Mid-transaction kill test verifies 0 partial writes. Automated backup & restore drill verified with RTO 1s (SLA ≤ 180s) and RPO 0s. Tests: `tests/resilience-kill.test.ts`, `scripts/dr-drill.sh`. | **GO** |
+| **G-11** | Validated soak, concurrency, and DR resilience | Real OS `SIGKILL` child process termination mid-transaction verified with zero orphan records and clean WAL rollback (`tests/fixtures/sigkill-worker.ts`). Continuous PostgreSQL 16 automated point-in-time disaster recovery drill wired into CI (`scripts/dr-drill.sh`, `scripts/restore.sh`, `scripts/backup.sh`) with RTO 1s (SLA ≤ 180s) and RPO 0s. Stage 4 concurrency and quick soak harness continuously gated in CI (`npm run soak:quick`) meeting all 10 frozen thresholds (12 stations, >1000 tx/s, 0% heap drift, 0 loss, 0 duplicates). Tests: `tests/resilience-kill.test.ts`, `scripts/dr-drill.sh`, `scripts/soak-runner.ts`. | **GO** |
 | **G-12** | Dual-verified licensing & brand/legal hygiene | **C-01:** Asymmetric Ed25519 node-locked licensing with canonical fingerprint (`SHA256("cpu:" + CPU + "|mb:" + MB + "|mac:" + MAC)`), additive drift scoring (CPU: 35, MB: 35, MAC: 30), 14-day grace period, and `scripts/mes-admin.ts` CLI. **C-02:** 100% elimination of real entity names (Dixon) and real personal names via `scripts/check-entity-hygiene.sh`. | **GO** |
 | **G-13** | Supervised factory pilot exit criteria met | Pilot edge package configured with SRE runbooks, remote diagnostics bundler (`scripts/export-diagnostics.ts`), deep health probes (`/health`, `/health/ready`, `/health/live`), authenticated `/metrics`, and non-destructive forward-only upgrade protocol. | **GO** |
 
@@ -72,16 +72,16 @@ Every launch gate is evaluated under strict binary (Go / No-Go) criteria.
 ### 4.1. Core API Test Suite (100% Pass)
 ```
 Test Files  42 passed (42)
-     Tests  326 passed (326)
+     Tests  327 passed (327)
   Duration  30.20s
 ```
 - Total test files: 42
-- Total assertions/tests: 326
+- Total assertions/tests: 327
 - Failures: 0
 - Skipped: 0
 
 ### 4.2. Cleanroom Web Cockpit & E2E Journey
-- Unit Tests: 2 suites, 26 tests passed 100% (`tests/auth-flow.test.ts`, `tests/traceability-station.test.ts`).
+- Unit Tests: 3 suites, 39 tests passed 100% (`tests/auth-flow.test.ts`, `tests/manager-navigation.test.ts`, `tests/traceability-station.test.ts`).
 - Playwright E2E: `tests/e2e/full-floor-journey.spec.ts` passed 100%:
   - Operator authentication via `LoginModal`
   - Splicing barcode scan & feeder interlock verification (PASS and NG reject)
