@@ -35,6 +35,8 @@ PROHIBITED_NAMES=(
 EXCLUDED_PATTERNS=(
   ":!CRITIQUE_11TH_SEPT_AND_WAY_FORWARD.md"
   ":!PROJECT_MEMORY.md"
+  ":!COMMERCIAL_RELEASE_ATTESTATION_REV3.md"
+  ":!docs/audit/"
   ":!docs/superpowers/specs/2026-09-09-mes-customer-readiness-design.md"
   ":!release/"
   ":!scripts/check-entity-hygiene.sh"

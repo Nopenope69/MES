@@ -58,28 +58,29 @@ export interface AuditExceptionsFile {
 async function checkDatabaseSchema(): Promise<DiagnosticModule> {
   const start = Date.now();
   try {
-    const schemaPath = path.resolve(__dirname, '../apps/api/src/db/schema.sql');
+    const migrationsDir = path.resolve(__dirname, '../apps/api/src/db/migrations');
     const databasePath = path.resolve(__dirname, '../apps/api/src/db/database.ts');
 
-    const schemaExists = fs.existsSync(schemaPath);
+    const migrationsExist = fs.existsSync(migrationsDir);
     const databaseExists = fs.existsSync(databasePath);
 
-    if (!schemaExists || !databaseExists) {
-      return { name: 'database-schema', status: 'FAIL', detail: 'Schema files missing', durationMs: Date.now() - start };
+    if (!migrationsExist || !databaseExists) {
+      return { name: 'database-schema', status: 'FAIL', detail: 'Migration or database files missing', durationMs: Date.now() - start };
     }
 
-    const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
+    const migrationFiles = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql'));
+    const combinedContent = migrationFiles.map(f => fs.readFileSync(path.join(migrationsDir, f), 'utf-8')).join('\n');
     const requiredTables = [
       'operators', 'production_events', 'compliance_audit_ledger',
       'device_history_records', 'refresh_tokens', 'dr_drill_history'
     ];
 
-    const missing = requiredTables.filter(t => !schemaContent.includes(t));
+    const missing = requiredTables.filter(t => !combinedContent.includes(t));
     if (missing.length > 0) {
-      return { name: 'database-schema', status: 'FAIL', detail: `Missing tables in schema.sql: ${missing.join(', ')}`, durationMs: Date.now() - start };
+      return { name: 'database-schema', status: 'FAIL', detail: `Missing tables in migrations: ${missing.join(', ')}`, durationMs: Date.now() - start };
     }
 
-    return { name: 'database-schema', status: 'PASS', detail: `All ${requiredTables.length} core tables present in schema`, durationMs: Date.now() - start };
+    return { name: 'database-schema', status: 'PASS', detail: `All ${requiredTables.length} core tables present in migrations chain`, durationMs: Date.now() - start };
   } catch (e: any) {
     return { name: 'database-schema', status: 'NOT_VERIFIED', detail: e.message, durationMs: Date.now() - start };
   }
@@ -428,10 +429,11 @@ async function checkTraceabilityModule(): Promise<DiagnosticModule> {
       return { name: 'traceability-module', status: 'FAIL', detail: `Missing public operations: ${missingOps.join(', ')}`, durationMs: Date.now() - start };
     }
 
-    const schemaPath = path.resolve(__dirname, '../apps/api/src/db/schema.sql');
-    const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
-    if (!schemaContent.includes('profile_run_id')) {
-      return { name: 'traceability-module', status: 'FAIL', detail: 'profile_run_id column missing from schema.sql', durationMs: Date.now() - start };
+    const migrationsDir = path.resolve(__dirname, '../apps/api/src/db/migrations');
+    const migrationFiles = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql'));
+    const combinedContent = migrationFiles.map(f => fs.readFileSync(path.join(migrationsDir, f), 'utf-8')).join('\n');
+    if (!combinedContent.includes('profile_run_id')) {
+      return { name: 'traceability-module', status: 'FAIL', detail: 'profile_run_id column missing from migrations', durationMs: Date.now() - start };
     }
 
     return { name: 'traceability-module', status: 'PASS', detail: `All ${requiredOps.length} public operations exported and profile_run_id verified`, durationMs: Date.now() - start };

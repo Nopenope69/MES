@@ -58,7 +58,6 @@ services:
     #   - "5432:5432"  # Hardened: Unpublished from host; accessible only within mes_network
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./apps/api/src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - mes_network
     healthcheck:

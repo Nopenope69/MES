@@ -9,6 +9,7 @@ import { SimpleRateLimiter } from '../src/security/http-security';
 import { SecretsConfigManager } from '../src/config/secrets';
 import { FujiNeximAdapter } from '../src/adapters/fuji-nexim.adapter';
 import { TokenManager } from '../src/security/jwt';
+import { EdhrService } from '../src/services/edhr.service';
 import express from 'express';
 
 describe('Track G: Security Hardening & Secrets Hygiene Suite', () => {
@@ -238,19 +239,24 @@ describe('Track G: Security Hardening & Secrets Hygiene Suite', () => {
 
   describe('6. Regulatory API Authentication Gate', () => {
     it('blocks unauthorized access to DHR release without valid API key and allows with valid key', async () => {
-      // Ensure DHR is in DRAFT state prior to testing release endpoint (prevents state leakage from previous test suites)
+      // Ensure DHR exists and is in DRAFT state prior to testing release endpoint (prevents state leakage from previous test suites)
       const db = getDatabase();
+      const existing = await db.query<any>("SELECT id FROM device_history_records WHERE dhr_number = 'DHR-JOB-SM-260901'");
+      if (existing.length === 0) {
+        await EdhrService.generateDhr('JOB-SM-260901', 'usr-sys-auto', 'SYSTEM_AUDITOR');
+      }
       await db.execute(
         "UPDATE device_history_records SET status = 'DRAFT', qa_reviewer_id = NULL, qa_released_at = NULL WHERE dhr_number = 'DHR-JOB-SM-260901'"
       );
 
       const config = SecretsConfigManager.loadConfig();
+      const qaApiKey = process.env.QA_SERVICE_KEY || `${config.apiKeySecret}-qa`;
 
       // 1. Missing API Key -> 401 Unauthorized
       const unauthorizedRes = await fetch(`${baseUrl}/api/v1/compliance/dhr/DHR-JOB-SM-260901/release`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qaReviewerId: 'usr-qa' })
+        body: JSON.stringify({ qaMeaning: 'Attempt without key' })
       });
       expect(unauthorizedRes.status).toBe(401);
       const unauthJson = await unauthorizedRes.json();
@@ -263,19 +269,32 @@ describe('Track G: Security Hardening & Secrets Hygiene Suite', () => {
           'Content-Type': 'application/json',
           'X-API-Key': 'malicious-or-wrong-key'
         },
-        body: JSON.stringify({ qaReviewerId: 'usr-qa' })
+        body: JSON.stringify({ qaMeaning: 'Attempt with wrong key' })
       });
       expect(invalidRes.status).toBe(401);
 
-      // 3. Valid API Key -> passes auth gate (returns 200 or business validation)
-      const validRes = await fetch(`${baseUrl}/api/v1/compliance/dhr/DHR-JOB-SM-260901/release`, {
+      // 3. System Admin Master Key -> 403 Forbidden (Strict SoD: Admin cannot approve QA release)
+      const adminRes = await fetch(`${baseUrl}/api/v1/compliance/dhr/DHR-JOB-SM-260901/release`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': config.apiKeySecret
         },
         body: JSON.stringify({
-          qaReviewerId: 'usr-qa-secops',
+          qaMeaning: 'Attempt release with master admin key',
+          releasedQuantity: 142
+        })
+      });
+      expect(adminRes.status).toBe(403);
+
+      // 4. Scoped QA Service Key -> 200 OK (Authorized Quality Approver)
+      const validRes = await fetch(`${baseUrl}/api/v1/compliance/dhr/DHR-JOB-SM-260901/release`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': qaApiKey
+        },
+        body: JSON.stringify({
           qaMeaning: 'Approved with regulatory authentication gate',
           releasedQuantity: 142
         })

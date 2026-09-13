@@ -348,52 +348,33 @@ export function getDatabase(): IDatabase {
 
 export async function initDatabase(): Promise<void> {
   const db = getDatabase();
-  let schemaSql = '';
-  const candidatePaths = [
-    path.resolve(__dirname, 'schema.sql'),
-    path.resolve(__dirname, '../../src/db/schema.sql'),
-    path.resolve(process.cwd(), 'schema.sql'),
-    path.resolve(process.cwd(), 'apps/api/src/db/schema.sql')
+
+  const candidateDirs = [
+    path.resolve(__dirname, 'migrations'),
+    path.resolve(__dirname, '../../src/db/migrations'),
+    path.resolve(process.cwd(), 'apps/api/src/db/migrations'),
+    path.resolve(process.cwd(), 'src/db/migrations'),
+    path.resolve(process.cwd(), 'migrations')
   ];
 
-  for (const candidate of candidatePaths) {
-    if (fs.existsSync(candidate)) {
-      schemaSql = fs.readFileSync(candidate, 'utf-8');
+  let migrationsDir = '';
+  for (const dir of candidateDirs) {
+    if (fs.existsSync(dir)) {
+      migrationsDir = dir;
       break;
     }
   }
 
-  if (!schemaSql) {
-    throw new Error('[DB] Could not locate schema.sql across candidate search paths');
+  if (!migrationsDir) {
+    throw new Error('[DB] Could not locate migrations directory across candidate search paths');
   }
 
-  await db.execScript(schemaSql);
-
-  // In SQLite, verify schema parity for columns added in forward migrations
-  try {
-    const tableInfo = await db.query<{ name: string }>('PRAGMA table_info(production_lines)');
-    if (tableInfo && tableInfo.length > 0) {
-      const hasStatus = tableInfo.some((col: any) => col.name === 'status');
-      if (!hasStatus) {
-        await db.execute("ALTER TABLE production_lines ADD COLUMN status VARCHAR(32) DEFAULT 'RUNNING'");
-      }
-    }
-  } catch (err: any) {
-    // Ignore if not supported (e.g. Postgres)
-  }
-
-  // If connected to PostgreSQL, execute the enterprise migration chain (001-007)
-  const isPostgres = Boolean(process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('postgres://') || process.env.DATABASE_URL.startsWith('postgresql://')));
-  if (isPostgres) {
-    const migrationsDir = path.resolve(__dirname, 'migrations');
-    if (fs.existsSync(migrationsDir)) {
-      const runner = new MigrationRunner(migrationsDir);
-      await runner.runPendingMigrations(db);
-    }
-  }
+  const runner = new MigrationRunner(migrationsDir);
+  await runner.runPendingMigrations(db);
 
   console.log('[DB] Schema verified and initialized.');
 }
+
 
 export class DatabaseManager {
   public static getInstance(): IDatabase {

@@ -82,7 +82,10 @@ predictiveRouter.post('/actions/:actionId/authorize', requirePermission(Permissi
   try {
     const actionId = String(req.params.actionId);
     const { mode } = req.body;
-    const authorizedBy = req.user?.code || req.user?.id || req.body.authorizedBy || 'sys-quality-lead';
+    const authorizedBy = req.user?.code || req.user?.id;
+    if (!authorizedBy) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: missing authenticated user context' });
+    }
     const result = await predictiveEngine.authorizeAction(
       actionId,
       authorizedBy,

@@ -18,6 +18,12 @@ CREATE TABLE IF NOT EXISTS organizations (
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS system_settings (
+  setting_key VARCHAR(64) PRIMARY KEY,
+  setting_value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS sites (
   id TEXT PRIMARY KEY,
   organization_id TEXT REFERENCES organizations(id) ON DELETE CASCADE,
@@ -44,6 +50,7 @@ CREATE TABLE IF NOT EXISTS production_lines (
   area_id TEXT REFERENCES areas(id) ON DELETE CASCADE,
   code TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'RUNNING',
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -55,14 +62,21 @@ CREATE TABLE IF NOT EXISTS work_centers (
   line_id TEXT REFERENCES production_lines(id) ON DELETE SET NULL,
   code TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
+  area TEXT,
+  type TEXT NOT NULL DEFAULT 'SMT_PLACEMENT',
   equipment_type TEXT NOT NULL DEFAULT 'SMT_PLACEMENT',
+  asset_path TEXT NOT NULL DEFAULT '',
   current_state TEXT NOT NULL DEFAULT 'IDLE',
   current_batch_id TEXT,
+  current_program_name TEXT,
   current_operator_id TEXT,
+  module_count INTEGER DEFAULT 1,
+  last_state_change_time TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_work_centers_area_id ON work_centers(area_id);
+
 
 CREATE TABLE IF NOT EXISTS equipment_units (
   id TEXT PRIMARY KEY,
@@ -144,6 +158,7 @@ CREATE TABLE IF NOT EXISTS ingress_events (
   protocol TEXT NOT NULL,
   raw_payload BYTEA NOT NULL,
   decoded_payload TEXT,
+  sequence_id BIGINT,
   received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   processed_status TEXT NOT NULL DEFAULT 'PENDING',
   error_details TEXT,
@@ -162,6 +177,26 @@ CREATE TABLE IF NOT EXISTS ingress_events_2026_10 PARTITION OF ingress_events
 
 CREATE TABLE IF NOT EXISTS ingress_events_default PARTITION OF ingress_events DEFAULT;
 
+CREATE TABLE IF NOT EXISTS raw_integration_messages (
+  id TEXT PRIMARY KEY,
+  source_adapter TEXT NOT NULL,
+  raw_payload TEXT NOT NULL,
+  processed_status TEXT NOT NULL DEFAULT 'PENDING',
+  received_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS feeder_error_logs (
+  id TEXT PRIMARY KEY,
+  work_center_id TEXT NOT NULL,
+  module_no INTEGER NOT NULL,
+  slot_no INTEGER NOT NULL,
+  feeder_id TEXT NOT NULL,
+  part_number TEXT NOT NULL,
+  nozzle_id TEXT,
+  error_type TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL
+);
+
 -- TIER 2: Canonical Domain Event Store (Event Sourcing Backbone)
 CREATE TABLE IF NOT EXISTS production_events (
   id TEXT NOT NULL,
@@ -171,6 +206,13 @@ CREATE TABLE IF NOT EXISTS production_events (
   batch_id TEXT,
   event_type TEXT NOT NULL,
   event_time TIMESTAMPTZ NOT NULL,
+  received_time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  sequence_id BIGINT,
+  site_id TEXT DEFAULT 'site-apex-01',
+  asset_path TEXT DEFAULT '',
+  work_order_id TEXT,
+  operator_id TEXT,
+  correlation_id TEXT,
   schema_version TEXT NOT NULL DEFAULT '1.0.0',
   payload_json JSONB NOT NULL,
   source_type TEXT NOT NULL,
@@ -227,15 +269,32 @@ CREATE TABLE IF NOT EXISTS component_reels (
   date_code TEXT DEFAULT '20260101',
   initial_quantity NUMERIC(12, 3) NOT NULL,
   current_quantity NUMERIC(12, 3) DEFAULT 0,
-  remaining_quantity NUMERIC(12, 3) NOT NULL,
+  remaining_quantity NUMERIC(12, 3) DEFAULT 0,
   quantity_remaining NUMERIC(12, 3) DEFAULT 0,
   unit TEXT NOT NULL DEFAULT 'PCS',
-  msl_level TEXT NOT NULL DEFAULT '1',
+  msl_level INTEGER NOT NULL DEFAULT 1,
+  msl_class TEXT NOT NULL DEFAULT 'MSL_1',
   msl_package_type TEXT NOT NULL DEFAULT 'SMD',
+  msl_remaining_minutes INTEGER NOT NULL DEFAULT 999999,
+  mbb_opened_at TIMESTAMPTZ,
+  mbb_resealed_at TIMESTAMPTZ,
+  storage_location TEXT DEFAULT 'FACTORY_FLOOR',
+  storage_state TEXT DEFAULT 'AMBIENT_EXPOSURE',
+  floor_clock_state TEXT DEFAULT 'FLOOR_EXPOSURE',
+  floor_life_nominal_minutes INTEGER DEFAULT 999999,
+  floor_life_expires_at TIMESTAMPTZ,
   initial_floor_life_seconds BIGINT NOT NULL DEFAULT 0,
+  hic_status TEXT DEFAULT 'OK',
+  hic_verified_at TIMESTAMPTZ,
+  hic_verified_by TEXT,
+  bake_status TEXT DEFAULT 'NOT_REQUIRED',
+  bake_started_at TIMESTAMPTZ,
+  last_bake_profile_id TEXT,
+  last_bake_completed_at TIMESTAMPTZ,
   status TEXT NOT NULL DEFAULT 'SEALED',
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
 
 CREATE INDEX IF NOT EXISTS idx_reels_part ON component_reels(part_number);
 CREATE INDEX IF NOT EXISTS idx_reels_lot ON component_reels(lot_number);
@@ -271,7 +330,7 @@ CREATE TABLE IF NOT EXISTS msl_exposure_logs (
   started_at TIMESTAMPTZ NOT NULL,
   ended_at TIMESTAMPTZ,
   duration_seconds INTEGER DEFAULT 0,
-  cabinet_id TEXT REFERENCES dry_cabinets(id),
+  cabinet_id TEXT,
   ambient_temperature_c NUMERIC(5, 2),
   ambient_rh NUMERIC(5, 2),
   source_event_id TEXT,
@@ -399,7 +458,10 @@ CREATE TABLE IF NOT EXISTS batches (
   unit TEXT NOT NULL DEFAULT 'PANEL',
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
-  operator_id TEXT
+  operator_id TEXT,
+  organization_id TEXT DEFAULT 'org-apex',
+  site_id TEXT DEFAULT 'site-apex-01',
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS panel_checkouts (
@@ -412,8 +474,10 @@ CREATE TABLE IF NOT EXISTS panel_checkouts (
   block_count INTEGER DEFAULT 1,
   block_skip_count INTEGER DEFAULT 0,
   skip_bitmask TEXT,
-  completed_at TIMESTAMPTZ NOT NULL
+  completed_at TIMESTAMPTZ NOT NULL,
+  profile_run_id TEXT
 );
+
 
 CREATE INDEX IF NOT EXISTS idx_panel_checkouts_batch ON panel_checkouts(batch_id);
 CREATE INDEX IF NOT EXISTS idx_panel_checkouts_barcode ON panel_checkouts(panel_barcode);

@@ -140,16 +140,6 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
       let actorId: string = matchedService ? matchedService.serviceId : 'svc-system';
       let serviceName: string = matchedService ? matchedService.name : 'System Service Principal';
 
-      if (isMasterKey) {
-        const headerRole = req.headers['x-service-role'];
-        if (typeof headerRole === 'string' && headerRole.trim()) {
-          role = headerRole.trim();
-        } else if (req.body?.qaReviewerId) {
-          role = 'QUALITY_LEAD';
-          actorId = String(req.body.qaReviewerId);
-          serviceName = 'QA Reviewer Service';
-        }
-      }
 
       const orgId = process.env.ORGANIZATION_ID || 'org-apex';
       const siteId = process.env.SITE_ID || 'site-apex-01';

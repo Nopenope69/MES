@@ -51,7 +51,7 @@ COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/api/src/db/schema.sql ./apps/api/src/db/schema.sql
+COPY --from=builder /app/apps/api/src/db/migrations ./apps/api/src/db/migrations
 
 # Prepare data directory for persistent factory-edge storage
 RUN mkdir -p /app/data && chown -R mesuser:mesgroup /app

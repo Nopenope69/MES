@@ -64,7 +64,10 @@ logisticsRouter.post('/agv/missions/:missionId/state', requirePermission(Permiss
 logisticsRouter.post('/agv/missions/:missionId/authorize-delivery', requirePermission(Permission.PRODUCTION_EXECUTE), async (req: Request, res: Response) => {
   try {
     const missionId = String(req.params.missionId);
-    const authorizedBy = req.user?.code || req.user?.id || req.body.authorizedBy || 'sys-dock-lead';
+    const authorizedBy = req.user?.code || req.user?.id;
+    if (!authorizedBy) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: missing authenticated user context' });
+    }
     const result = await agvManager.authorizeDockDelivery({
       missionId,
       authorizedBy

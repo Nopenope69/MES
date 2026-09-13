@@ -107,8 +107,14 @@ complianceRouter.post(
       });
     }
 
-    const effectiveActorId = req.user?.code || req.user?.id || actorId || 'SYSTEM_DHR_ENGINE';
-    const effectiveActorRole = req.user?.role || actorRole || 'QA_SPECIALIST';
+    const effectiveActorId = req.user?.code || req.user?.id;
+    const effectiveActorRole = req.user?.role;
+    if (!effectiveActorId || !effectiveActorRole) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized: missing authenticated user context'
+      });
+    }
 
     const dhr = await EdhrService.generateDhr(
       batchId,
@@ -161,13 +167,13 @@ complianceRouter.post(
   async (req: Request, res: Response) => {
   try {
     const { dhrNumber } = req.params;
-    const { qaReviewerId, qaMeaning, releasedQuantity } = req.body;
+    const { qaMeaning, releasedQuantity } = req.body;
 
-    const effectiveReviewer = req.user?.code || req.user?.id || qaReviewerId;
+    const effectiveReviewer = req.user?.code || req.user?.id;
     if (!effectiveReviewer) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        error: 'qaReviewerId is required for formal QA release'
+        error: 'Unauthorized: Authenticated QA reviewer principal is required for formal QA release'
       });
     }
 

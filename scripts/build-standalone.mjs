@@ -12,12 +12,12 @@ console.log('   🔨 BUILDING ANTIGRAVITY SMT MES STANDALONE EXECUTABLE (.EXE & 
 console.log('================================================================================\n');
 
 // 1. Verify schema file exists
-console.log('[1/7] Verifying SQLite DDL schema...');
-const schemaSqlPath = path.join(rootDir, 'apps/api/src/db/schema.sql');
+console.log('[1/7] Verifying DDL migrations schema...');
+const schemaSqlPath = path.join(rootDir, 'apps/api/src/db/migrations/001_enterprise_schema.sql');
 if (!fs.existsSync(schemaSqlPath)) {
-  throw new Error(`Schema file not found at ${schemaSqlPath}`);
+  throw new Error(`Migration schema file not found at ${schemaSqlPath}`);
 }
-console.log('  ✓ apps/api/src/db/schema.sql verified.');
+console.log('  ✓ apps/api/src/db/migrations/001_enterprise_schema.sql verified.');
 
 // 2. Build Shared Domain Library
 console.log('\n[2/7] Compiling @mes/shared library...');

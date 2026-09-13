@@ -85,11 +85,17 @@ aoiRouter.get('/cad/:programId/:programRevision', requirePermission(Permission.R
 aoiRouter.post('/disposition', requirePermission(Permission.QUALITY_APPROVE), async (req: Request, res: Response) => {
   try {
     const { defectId, panelBarcode, unitPosition, disposition, reason } = req.body;
-    const authorizedBy = req.user?.code || req.user?.id || req.body.authorizedBy;
-    if (!defectId || !panelBarcode || !disposition || !reason || !authorizedBy) {
+    const authorizedBy = req.user?.code || req.user?.id;
+    if (!authorizedBy) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized: missing authenticated user context'
+      });
+    }
+    if (!defectId || !panelBarcode || !disposition || !reason) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required disposition fields: defectId, panelBarcode, disposition, reason, authorizedBy'
+        error: 'Missing required disposition fields: defectId, panelBarcode, disposition, reason'
       });
     }
 
@@ -215,11 +221,17 @@ aoiRouter.post('/post-rework-inspect', requirePermission(Permission.QUALITY_APPR
 aoiRouter.post('/interlocks/clear', requirePermission(Permission.QUALITY_APPROVE), async (req: Request, res: Response) => {
   try {
     const { workCenterId, reason } = req.body;
-    const authorizedBy = req.user?.code || req.user?.id || req.body.authorizedBy;
-    if (!workCenterId || !authorizedBy || !reason) {
+    const authorizedBy = req.user?.code || req.user?.id;
+    if (!authorizedBy) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized: missing authenticated user context'
+      });
+    }
+    if (!workCenterId || !reason) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required interlock clear fields: workCenterId, authorizedBy, reason'
+        error: 'Missing required interlock clear fields: workCenterId, reason'
       });
     }
 
