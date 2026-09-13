@@ -3,98 +3,86 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-bg-base: #0A0D12;
+    --color-surface-subtle: #12151C;
+    --color-surface-elevated: #181C26;
+    --color-border-hairline: rgba(255, 255, 255, 0.08);
+    --color-border-focus: rgba(255, 255, 255, 0.25);
+    
+    --color-text-primary: #EDEDED;
+    --color-text-secondary: #94A3B8;
+    --color-text-muted: #64748B;
+    
+    --color-signal-live: #10B981;
+    --color-signal-warn: #F59E0B;
+    --color-signal-alert: #EF4444;
+    --color-signal-info: #3B82F6;
+  }
+
   body {
     margin: 0;
-    background-color: #0B0F14;
-    color: #F0F4F8;
-    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--color-bg-base);
+    color: var(--color-text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    font-feature-settings: "tnum" 1;
   }
 }
 
-/* Subtle Industrial Cleanroom PCB Circuit Substrate Grid */
-.bg-pcb-grid {
-  background-size: 24px 24px;
+/* Precision Cleanroom Dark Grid (Subtle, non-distracting) */
+.bg-cleanroom-grid {
+  background-size: 32px 32px;
   background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
 }
 
-/* Milled Anodized Metal Bezel Effect */
-.milled-panel {
-  background: #121820;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+/* Precision Instrument Bezel */
+.instrument-bezel {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border-hairline);
 }
 
-.milled-slot {
-  background: #17202A;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-/* Physical SMT Feeder Cassette Rail */
+/* SMT Feeder Cassette Rail */
 .feeder-rail {
   background: repeating-linear-gradient(
     90deg,
-    #151D26,
-    #151D26 12px,
-    #1C2632 12px,
-    #1C2632 24px
+    #11141A,
+    #11141A 12px,
+    #161A22 12px,
+    #161A22 24px
   );
-  border-bottom: 2px solid #2B3848;
+  border-bottom: 2px solid #232936;
 }
 
-/* Crisp Industrial Andon Status Indicators (Zero Fuzzy Glows) */
-.andon-green {
-  border: 1px solid #00E699;
-}
-
-.andon-amber {
-  border: 1px solid #FFB800;
-}
-
-.andon-red {
-  border: 1px solid #FF334B;
-}
-
-/* Industrial Optical Crosshair Sweep */
-@keyframes laserSweep {
-  0% { transform: translateY(-100%); opacity: 0.3; }
-  50% { opacity: 1; }
-  100% { transform: translateY(100%); opacity: 0.3; }
-}
-
-.laser-reticle {
-  position: relative;
-  overflow: hidden;
-}
-
-.laser-reticle::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: #00E699;
-  animation: laserSweep 2s ease-in-out infinite;
-}
-
-/* Custom Ergonomic Scrollbar */
+/* Ergonomic Non-Intrusive Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #0B0F14;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #222E3C;
-  border-radius: 3px;
+  background: #202633;
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334356;
+  background: #313A4D;
+}
+
+/* Global Reduced Motion Compliance */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
